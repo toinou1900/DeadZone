@@ -1,7 +1,8 @@
 # DeadZone Engine
 
 Squelette : SDL3 (fenetre/entrees) + bgfx (rendu). Cible : Windows et Linux.
-Contenu actuel : un cube 3D (shaders dans `shaders/`, compiles au build) et une camera libre.
+Contenu actuel : un cube 3D, une camera libre et le chargement de modeles 3D via Assimp
+(FBX, OBJ, STL, glTF/GLB, PLY, DAE, 3DS). Shaders dans `shaders/`, compiles au build.
 
 ## Prerequis
 - CMake >= 3.24, Git
@@ -27,8 +28,16 @@ La premiere configuration telecharge SDL3 et bgfx (plusieurs minutes, c'est norm
 - ZQSD (AZERTY) / WASD (QWERTY) : deplacement (memes touches physiques)
 - Espace / Ctrl gauche : monter / descendre, Shift : plus vite
 - Clic droit maintenu + souris : regarder autour
+- R : arreter / relancer la rotation
 - Echap : quitter
 
 ## Notes
 - Windows : le rendu utilise Direct3D 11 pour l'instant (D3D12 demande des shaders DXIL, a ajouter plus tard).
 - Les shaders sont compiles par `shaderc` (construit avec bgfx) et integres au binaire.
+
+## Charger un modele 3D
+- Glisser-deposer un fichier sur la fenetre, ou : `DeadZone.exe chemin\vers\modele.fbx`
+- Un modele de test est fourni : `assets/torus.obj`
+- Le modele est recentre et mis a l'echelle automatiquement. Les couleurs viennent des matieres
+  du fichier ; les textures ne sont pas encore gerees.
+- STL / certains exports sont "Z vers le haut" : le modele peut apparaitre couche (pas encore corrige).

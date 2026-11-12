@@ -1,4 +1,4 @@
-// DeadZone Engine - cube 3D : fenetre SDL3 + rendu bgfx + camera libre (Windows / Linux)
+// DeadZone Engine - cube 3D + chargement de modeles (Assimp) : SDL3 + bgfx + camera libre (Windows / Linux)
 #include <SDL3/SDL.h>
 #include <bgfx/bgfx.h>
 
@@ -15,24 +15,42 @@
 
 #include <bx/math.h>
 
+#include "model.h"
+
 #include "spirv/vs_cube.sc.bin.h"
 #include "spirv/fs_cube.sc.bin.h"
+#include "spirv/vs_mesh.sc.bin.h"
+#include "spirv/fs_mesh.sc.bin.h"
 #include "glsl/vs_cube.sc.bin.h"
 #include "glsl/fs_cube.sc.bin.h"
+#include "glsl/vs_mesh.sc.bin.h"
+#include "glsl/fs_mesh.sc.bin.h"
 #if defined(_WIN32)
 #   include "dxbc/vs_cube.sc.bin.h"
 #   include "dxbc/fs_cube.sc.bin.h"
+#   include "dxbc/vs_mesh.sc.bin.h"
+#   include "dxbc/fs_mesh.sc.bin.h"
 #endif
 
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <string>
 
 static const bgfx::EmbeddedShader kEmbeddedShaders[] = {
     BGFX_EMBEDDED_SHADER(vs_cube),
     BGFX_EMBEDDED_SHADER(fs_cube),
+    BGFX_EMBEDDED_SHADER(vs_mesh),
+    BGFX_EMBEDDED_SHADER(fs_mesh),
     BGFX_EMBEDDED_SHADER_END()
 };
+
+static bgfx::ProgramHandle loadProgram(const char* vsName, const char* fsName) {
+    const bgfx::RendererType::Enum type = bgfx::getRendererType();
+    bgfx::ShaderHandle vsh = bgfx::createEmbeddedShader(kEmbeddedShaders, type, vsName);
+    bgfx::ShaderHandle fsh = bgfx::createEmbeddedShader(kEmbeddedShaders, type, fsName);
+    return bgfx::createProgram(vsh, fsh, true /* detruit les shaders avec le programme */);
+}
 
 // ------------------------------------------------------------------ Cube
 struct PosColorVertex {
@@ -79,7 +97,7 @@ static bool fillNativeWindow(SDL_Window* window, bgfx::SwapChain& sc) {
     return sc.nwh != nullptr;
 }
 
-int main(int, char**) {
+int main(int argc, char** argv) {
 #if defined(__linux__)
     // bgfx a besoin d'X11 ici (sous Wayland, ca passe via XWayland)
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "x11");
@@ -136,10 +154,27 @@ int main(int, char**) {
     bgfx::IndexBufferHandle ibh =
         bgfx::createIndexBuffer(bgfx::makeRef(kCubeIndices, sizeof(kCubeIndices)));
 
-    bgfx::RendererType::Enum rendererType = bgfx::getRendererType();
-    bgfx::ShaderHandle vsh = bgfx::createEmbeddedShader(kEmbeddedShaders, rendererType, "vs_cube");
-    bgfx::ShaderHandle fsh = bgfx::createEmbeddedShader(kEmbeddedShaders, rendererType, "fs_cube");
-    bgfx::ProgramHandle program = bgfx::createProgram(vsh, fsh, true /* detruit les shaders avec le programme */);
+    bgfx::ProgramHandle cubeProgram = loadProgram("vs_cube", "fs_cube");
+    bgfx::ProgramHandle meshProgram = loadProgram("vs_mesh", "fs_mesh");
+    bgfx::UniformHandle uLightDir   = bgfx::createUniform("u_lightDir", bgfx::UniformType::Vec4);
+    bgfx::UniformHandle uColor      = bgfx::createUniform("u_color",    bgfx::UniformType::Vec4);
+
+    // --- Modele 3D : en argument de la ligne de commande, ou glisse-depose sur la fenetre
+    Model model;
+    std::string modelName;
+    std::string modelError;
+    auto loadModel = [&](const std::string& path) {
+        std::string err;
+        if (model.load(path, err)) {
+            const size_t slash = path.find_last_of("/\\");
+            modelName  = (slash == std::string::npos) ? path : path.substr(slash + 1);
+            modelError.clear();
+        } else {
+            modelError = err;
+        }
+    };
+    if (argc > 1) loadModel(argv[1]);
+    bool spin = true;
 
     Camera cam;
     bool mouseLook = false;
@@ -152,6 +187,8 @@ int main(int, char**) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_EVENT_QUIT) running = false;
             if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) running = false;
+            if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_R) spin = !spin;
+            if (e.type == SDL_EVENT_DROP_FILE && e.drop.data) loadModel(e.drop.data);
             if (e.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
                 SDL_GetWindowSizeInPixels(window, &w, &h);
                 bgfx::SwapChain sc; // les champs laisses a leur valeur par defaut restent inchanges
@@ -180,7 +217,7 @@ int main(int, char**) {
         const uint64_t nowTicks = SDL_GetTicks();
         const float dt = static_cast<float>(nowTicks - lastTicks) / 1000.0f;
         lastTicks = nowTicks;
-        time += dt;
+        if (spin) time += dt;
 
         // --- Deplacement (touches physiques : WASD en QWERTY = ZQSD en AZERTY)
         const bool* keys = SDL_GetKeyboardState(nullptr);
@@ -211,14 +248,31 @@ int main(int, char**) {
         bgfx::setViewRect(kMainView, 0, 0, static_cast<uint16_t>(w), static_cast<uint16_t>(h));
         bgfx::touch(kMainView);
 
-        // --- Le cube (tourne sur lui-meme)
-        float model[16];
-        bx::mtxRotateXY(model, time * 0.6f, time * 0.9f);
-        bgfx::setTransform(model);
-        bgfx::setVertexBuffer(0, vbh);
-        bgfx::setIndexBuffer(ibh);
-        bgfx::setState(BGFX_STATE_DEFAULT);
-        bgfx::submit(kMainView, program);
+        if (model.valid()) {
+            // --- Le modele charge (plateau tournant), eclaire par une lumiere directionnelle
+            float world[16];
+            bx::mtxRotateXY(world, 0.0f, time * 0.5f);
+            const float lightDir[4] = {0.4f, 0.8f, -0.5f, 0.0f};
+            for (const MeshPart& part : model.parts()) {
+                bgfx::setTransform(world);
+                bgfx::setVertexBuffer(0, part.vbh);
+                bgfx::setIndexBuffer(part.ibh);
+                bgfx::setUniform(uLightDir, lightDir);
+                bgfx::setUniform(uColor, part.color);
+                // pas de culling : les modeles ont des conventions de sens des faces variables
+                bgfx::setState(BGFX_STATE_DEFAULT & ~BGFX_STATE_CULL_MASK);
+                bgfx::submit(kMainView, meshProgram);
+            }
+        } else {
+            // --- Le cube de test (tourne sur lui-meme)
+            float world[16];
+            bx::mtxRotateXY(world, time * 0.6f, time * 0.9f);
+            bgfx::setTransform(world);
+            bgfx::setVertexBuffer(0, vbh);
+            bgfx::setIndexBuffer(ibh);
+            bgfx::setState(BGFX_STATE_DEFAULT);
+            bgfx::submit(kMainView, cubeProgram);
+        }
 
         // --- Texte de debug
         bgfx::dbgTextClear();
@@ -226,12 +280,25 @@ int main(int, char**) {
         bgfx::dbgTextPrintf(1, 2, 0x07, "Renderer : %s", bgfx::getRendererName(bgfx::getRendererType()));
         bgfx::dbgTextPrintf(1, 3, 0x07, "FPS : %.0f", dt > 0.0f ? 1.0f / dt : 0.0f);
         bgfx::dbgTextPrintf(1, 5, 0x07, "ZQSD / WASD : deplacement   Espace / Ctrl : monter / descendre   Shift : vite");
-        bgfx::dbgTextPrintf(1, 6, 0x07, "Clic droit maintenu : regarder autour   Echap : quitter");
+        bgfx::dbgTextPrintf(1, 6, 0x07, "Clic droit maintenu : regarder autour   R : rotation on/off   Echap : quitter");
+        if (model.valid()) {
+            bgfx::dbgTextPrintf(1, 8, 0x0a, "Modele : %s (%u sommets, %u triangles)", modelName.c_str(),
+                                model.vertexCount(), model.triangleCount());
+        } else {
+            bgfx::dbgTextPrintf(1, 8, 0x0e, "Glisse un modele (.fbx .obj .stl .gltf .glb .ply .dae .3ds) sur la fenetre");
+        }
+        if (!modelError.empty()) {
+            bgfx::dbgTextPrintf(1, 9, 0x0c, "Erreur : %s", modelError.c_str());
+        }
 
         bgfx::frame();
     }
 
-    bgfx::destroy(program);
+    model.destroy(); // avant bgfx::shutdown()
+    bgfx::destroy(uColor);
+    bgfx::destroy(uLightDir);
+    bgfx::destroy(meshProgram);
+    bgfx::destroy(cubeProgram);
     bgfx::destroy(ibh);
     bgfx::destroy(vbh);
     bgfx::shutdown();

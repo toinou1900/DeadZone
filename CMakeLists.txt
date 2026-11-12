@@ -30,7 +30,25 @@ FetchContent_Declare(bgfx_cmake
     GIT_TAG        v1.168.9624-612
     GIT_SHALLOW    TRUE)
 
-FetchContent_MakeAvailable(SDL3 bgfx_cmake)
+# --------------------------------------------------------------- Assimp
+# Import de modeles 3D. On ne compile que les formats utiles (build plus rapide).
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_NO_EXPORT ON CACHE BOOL "" FORCE)
+set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
+foreach(fmt FBX OBJ STL GLTF PLY COLLADA 3DS)
+    set(ASSIMP_BUILD_${fmt}_IMPORTER ON CACHE BOOL "" FORCE)
+endforeach()
+FetchContent_Declare(assimp
+    GIT_REPOSITORY https://github.com/assimp/assimp.git
+    GIT_TAG        v6.0.5
+    GIT_SHALLOW    TRUE)
+
+FetchContent_MakeAvailable(SDL3 bgfx_cmake assimp)
 
 # -------------------------------------------------------------- Shaders
 # Les shaders (dossier shaders/) sont compiles par shaderc a chaque build, puis integres
@@ -49,7 +67,7 @@ endif()
 
 bgfx_compile_shaders(
     TYPE VERTEX
-    SHADERS ${DZ_SHADER_DIR}/vs_cube.sc
+    SHADERS ${DZ_SHADER_DIR}/vs_cube.sc ${DZ_SHADER_DIR}/vs_mesh.sc
     VARYING_DEF ${DZ_SHADER_DIR}/varying.def.sc
     OUTPUT_DIR ${DZ_SHADER_OUT}
     OUT_FILES_VAR DZ_VS_FILES
@@ -58,7 +76,7 @@ bgfx_compile_shaders(
     AS_HEADERS)
 bgfx_compile_shaders(
     TYPE FRAGMENT
-    SHADERS ${DZ_SHADER_DIR}/fs_cube.sc
+    SHADERS ${DZ_SHADER_DIR}/fs_cube.sc ${DZ_SHADER_DIR}/fs_mesh.sc
     VARYING_DEF ${DZ_SHADER_DIR}/varying.def.sc
     OUTPUT_DIR ${DZ_SHADER_OUT}
     OUT_FILES_VAR DZ_FS_FILES
@@ -67,9 +85,9 @@ bgfx_compile_shaders(
     AS_HEADERS)
 
 # -------------------------------------------------------------- Moteur
-add_executable(DeadZone src/main.cpp ${DZ_VS_FILES} ${DZ_FS_FILES})
+add_executable(DeadZone src/main.cpp src/model.cpp ${DZ_VS_FILES} ${DZ_FS_FILES})
 target_include_directories(DeadZone PRIVATE ${DZ_SHADER_OUT})
-target_link_libraries(DeadZone PRIVATE SDL3::SDL3 bgfx bx bimg bimg_decode)
+target_link_libraries(DeadZone PRIVATE SDL3::SDL3 assimp::assimp bgfx bx bimg bimg_decode)
 
 if(WIN32 AND MSVC)
     target_compile_options(DeadZone PRIVATE /W4 /utf-8)
