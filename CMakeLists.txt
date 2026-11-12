@@ -85,7 +85,14 @@ bgfx_compile_shaders(
     AS_HEADERS)
 
 # -------------------------------------------------------------- Moteur
-add_executable(DeadZone src/main.cpp src/model.cpp ${DZ_VS_FILES} ${DZ_FS_FILES})
+add_executable(DeadZone
+    src/main.cpp
+    src/engine.cpp
+    src/window.cpp
+    src/renderer.cpp
+    src/camera.cpp
+    src/model.cpp
+    ${DZ_VS_FILES} ${DZ_FS_FILES})
 target_include_directories(DeadZone PRIVATE ${DZ_SHADER_OUT})
 target_link_libraries(DeadZone PRIVATE SDL3::SDL3 assimp::assimp bgfx bx bimg bimg_decode)
 

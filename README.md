@@ -41,3 +41,16 @@ La premiere configuration telecharge SDL3 et bgfx (plusieurs minutes, c'est norm
 - Le modele est recentre et mis a l'echelle automatiquement. Les couleurs viennent des matieres
   du fichier ; les textures ne sont pas encore gerees.
 - STL / certains exports sont "Z vers le haut" : le modele peut apparaitre couche (pas encore corrige).
+
+## Structure du code (src/)
+| Fichier | Role |
+|---|---|
+| `main.cpp` | Point d'entree : cree le moteur et le lance |
+| `engine.*` | `Engine` : boucle de jeu, evenements, relie tous les modules |
+| `window.*` | `Window` : fenetre SDL3, handles natifs, capture de la souris |
+| `renderer.*` | `Renderer` : bgfx, shaders integres, dessin du cube et des modeles, texte de debug |
+| `camera.*` | `Camera` : camera libre (position, regard, matrices vue/projection) |
+| `model.*` | `Model` : chargement de modeles 3D (Assimp) et buffers GPU |
+| `../shaders/` | Shaders (.sc), compiles par shaderc pendant le build |
+
+Ordre d'arret important : detruire les modeles (`Model::destroy`) avant `Renderer::shutdown`.
