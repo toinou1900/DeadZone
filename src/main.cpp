@@ -54,6 +54,8 @@ int main(int, char**) {
         return 1;
     }
 
+    bgfx::setDebug(BGFX_DEBUG_TEXT); // sans ce flag, dbgTextPrintf n'affiche rien
+
     const bgfx::ViewId kMainView = 0;
     bgfx::setViewClear(kMainView, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x1a1a2eff, 1.0f, 0);
 
