@@ -1,6 +1,7 @@
 # DeadZone Engine
 
 Squelette : SDL3 (fenetre/entrees) + bgfx (rendu). Cible : Windows et Linux.
+Contenu actuel : un cube 3D (shaders dans `shaders/`, compiles au build) et une camera libre.
 
 ## Prerequis
 - CMake >= 3.24, Git
@@ -21,3 +22,13 @@ Linux :
     ./build/linux/DeadZone
 
 La premiere configuration telecharge SDL3 et bgfx (plusieurs minutes, c'est normal).
+
+## Controles
+- ZQSD (AZERTY) / WASD (QWERTY) : deplacement (memes touches physiques)
+- Espace / Ctrl gauche : monter / descendre, Shift : plus vite
+- Clic droit maintenu + souris : regarder autour
+- Echap : quitter
+
+## Notes
+- Windows : le rendu utilise Direct3D 11 pour l'instant (D3D12 demande des shaders DXIL, a ajouter plus tard).
+- Les shaders sont compiles par `shaderc` (construit avec bgfx) et integres au binaire.

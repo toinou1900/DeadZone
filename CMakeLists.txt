@@ -32,8 +32,43 @@ FetchContent_Declare(bgfx_cmake
 
 FetchContent_MakeAvailable(SDL3 bgfx_cmake)
 
+# -------------------------------------------------------------- Shaders
+# Les shaders (dossier shaders/) sont compiles par shaderc a chaque build, puis integres
+# au code sous forme de headers (plus aucun fichier a distribuer a cote de l'exe).
+include(${bgfx_cmake_SOURCE_DIR}/cmake/bgfxToolUtils.cmake)
+FetchContent_GetProperties(bgfx) # -> bgfx_SOURCE_DIR (pour bgfx_shader.sh)
+
+set(DZ_SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
+set(DZ_SHADER_OUT ${CMAKE_CURRENT_BINARY_DIR}/generated/shaders)
+
+# Profils : spirv = Vulkan, 430 = OpenGL, s_5_0 = Direct3D 11 (Windows uniquement)
+set(DZ_SHADER_PROFILES spirv 430)
+if(WIN32)
+    list(APPEND DZ_SHADER_PROFILES s_5_0)
+endif()
+
+bgfx_compile_shaders(
+    TYPE VERTEX
+    SHADERS ${DZ_SHADER_DIR}/vs_cube.sc
+    VARYING_DEF ${DZ_SHADER_DIR}/varying.def.sc
+    OUTPUT_DIR ${DZ_SHADER_OUT}
+    OUT_FILES_VAR DZ_VS_FILES
+    INCLUDE_DIRS ${bgfx_SOURCE_DIR}/src
+    PROFILES ${DZ_SHADER_PROFILES}
+    AS_HEADERS)
+bgfx_compile_shaders(
+    TYPE FRAGMENT
+    SHADERS ${DZ_SHADER_DIR}/fs_cube.sc
+    VARYING_DEF ${DZ_SHADER_DIR}/varying.def.sc
+    OUTPUT_DIR ${DZ_SHADER_OUT}
+    OUT_FILES_VAR DZ_FS_FILES
+    INCLUDE_DIRS ${bgfx_SOURCE_DIR}/src
+    PROFILES ${DZ_SHADER_PROFILES}
+    AS_HEADERS)
+
 # -------------------------------------------------------------- Moteur
-add_executable(DeadZone src/main.cpp)
+add_executable(DeadZone src/main.cpp ${DZ_VS_FILES} ${DZ_FS_FILES})
+target_include_directories(DeadZone PRIVATE ${DZ_SHADER_OUT})
 target_link_libraries(DeadZone PRIVATE SDL3::SDL3 bgfx bx bimg bimg_decode)
 
 if(WIN32 AND MSVC)
