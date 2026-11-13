@@ -38,6 +38,7 @@ private:
     bool     m_running   = false;
     bool     m_mouseLook = false;
     bool     m_spin      = true;
+    bool     m_minimized = false; // fenetre reduite : on met le rendu en pause
 
     // Compteur de FPS lisse (moyenne sur ~0,5 s) : l'image par image est trop instable pour etre lisible.
     float    m_fpsTime   = 0.0f;

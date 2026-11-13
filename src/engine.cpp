@@ -4,6 +4,12 @@
 
 #include <algorithm>
 
+namespace {
+// Duree maximale d'une image (secondes) pour la simulation. Si la fenetre a ete cachee ou le programme
+// bloque un moment, la premiere image au retour aurait un `dt` enorme : tout sauterait d'un coup.
+constexpr float kMaxDt = 0.1f;
+} // namespace
+
 bool Engine::init(int argc, char** argv) {
     if (!m_window.create("DeadZone Engine", 1280, 720)) return false;
     if (!m_renderer.init(m_window)) return false;
@@ -22,8 +28,13 @@ void Engine::run() {
         while (SDL_PollEvent(&e)) handleEvent(e);
 
         const uint64_t nowTicks = SDL_GetTicks();
-        const float dt = static_cast<float>(nowTicks - m_lastTicks) / 1000.0f;
+        const float dt = std::min(static_cast<float>(nowTicks - m_lastTicks) / 1000.0f, kMaxDt);
         m_lastTicks = nowTicks;
+
+        if (m_minimized) {   // rien a afficher : on evite de tourner a vide
+            SDL_Delay(50);
+            continue;
+        }
 
         update(dt);
         render(dt);
@@ -49,6 +60,14 @@ void Engine::handleEvent(const SDL_Event& e) {
         break;
     case SDL_EVENT_DROP_FILE:
         if (e.drop.data) spawnModel(e.drop.data);
+        break;
+    case SDL_EVENT_WINDOW_MINIMIZED:
+    case SDL_EVENT_WINDOW_HIDDEN:
+        m_minimized = true;
+        break;
+    case SDL_EVENT_WINDOW_RESTORED:
+    case SDL_EVENT_WINDOW_SHOWN:
+        m_minimized = false;
         break;
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
         m_renderer.resize(static_cast<uint32_t>(m_window.pixelWidth()),
