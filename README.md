@@ -29,6 +29,9 @@ La premiere configuration telecharge SDL3 et bgfx (plusieurs minutes, c'est norm
 - Espace / Ctrl gauche : monter / descendre, Shift : plus vite
 - Clic droit maintenu + souris : regarder autour
 - R : arreter / relancer la rotation
+- V : activer / couper la synchronisation verticale (vsync)
+- Glisser un modele sur la fenetre : l'ajouter a la scene (autant que voulu)
+- Suppr / Retour arriere : retirer le dernier modele ajoute
 - Echap : quitter
 
 ## Notes
@@ -47,10 +50,19 @@ La premiere configuration telecharge SDL3 et bgfx (plusieurs minutes, c'est norm
 |---|---|
 | `main.cpp` | Point d'entree : cree le moteur et le lance |
 | `engine.*` | `Engine` : boucle de jeu, evenements, relie tous les modules |
+| `components.h` | Composants ECS (donnees pures) : `Name`, `Transform`, `Spin`, `MeshRenderer`, `CubeRenderer` |
+| `scene.*` | `Scene` : registre EnTT, creation d'entites et systemes (rotation, rendu) |
 | `window.*` | `Window` : fenetre SDL3, handles natifs, capture de la souris |
-| `renderer.*` | `Renderer` : bgfx, shaders integres, dessin du cube et des modeles, texte de debug |
+| `renderer.*` | `Renderer` : bgfx, shaders integres, dessin (recoit une matrice monde), texte de debug |
 | `camera.*` | `Camera` : camera libre (position, regard, matrices vue/projection) |
 | `model.*` | `Model` : chargement de modeles 3D (Assimp) et buffers GPU |
 | `../shaders/` | Shaders (.sc), compiles par shaderc pendant le build |
 
-Ordre d'arret important : detruire les modeles (`Model::destroy`) avant `Renderer::shutdown`.
+Ordre d'arret important : vider la scene (`Scene::clear`) avant `Renderer::shutdown`, car les modeles liberent leurs buffers GPU.
+
+## ECS (EnTT)
+- **Entite** : un simple identifiant. **Composant** : des donnees (`components.h`). **Systeme** : une fonction qui
+  parcourt les entites ayant certains composants (`scene.cpp`).
+- Systemes actuels : `spinSystem` (Transform + Spin) et `renderSystem` (Transform + MeshRenderer / CubeRenderer).
+- Pour ajouter un comportement : creer un composant, l'attacher a des entites, ecrire un systeme et l'appeler dans
+  `Scene::update` ou `Scene::render`.

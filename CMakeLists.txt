@@ -48,7 +48,26 @@ FetchContent_Declare(assimp
     GIT_TAG        v6.0.5
     GIT_SHALLOW    TRUE)
 
-FetchContent_MakeAvailable(SDL3 bgfx_cmake assimp)
+# ----------------------------------------------------------------- EnTT
+# ECS (entites / composants / systemes), bibliotheque d'en-tetes.
+FetchContent_Declare(EnTT
+    GIT_REPOSITORY https://github.com/skypjack/entt.git
+    GIT_TAG        v3.16.0
+    GIT_SHALLOW    TRUE)
+
+# On masque les avertissements du code des bibliotheques tierces (GCC/Clang recents en generent beaucoup,
+# sans danger : ce n'est pas notre code). Nos propres fichiers gardent -Wall -Wextra / /W4 (voir plus bas).
+set(DZ_SAVED_C_FLAGS   "${CMAKE_C_FLAGS}")
+set(DZ_SAVED_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+if(NOT MSVC)
+    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -w")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+endif()
+
+FetchContent_MakeAvailable(SDL3 bgfx_cmake assimp EnTT)
+
+set(CMAKE_C_FLAGS   "${DZ_SAVED_C_FLAGS}")
+set(CMAKE_CXX_FLAGS "${DZ_SAVED_CXX_FLAGS}")
 
 # -------------------------------------------------------------- Shaders
 # Les shaders (dossier shaders/) sont compiles par shaderc a chaque build, puis integres
@@ -92,9 +111,10 @@ add_executable(DeadZone
     src/renderer.cpp
     src/camera.cpp
     src/model.cpp
+    src/scene.cpp
     ${DZ_VS_FILES} ${DZ_FS_FILES})
 target_include_directories(DeadZone PRIVATE ${DZ_SHADER_OUT})
-target_link_libraries(DeadZone PRIVATE SDL3::SDL3 assimp::assimp bgfx bx bimg bimg_decode)
+target_link_libraries(DeadZone PRIVATE SDL3::SDL3 assimp::assimp EnTT::EnTT bgfx bx bimg bimg_decode)
 
 if(WIN32 AND MSVC)
     target_compile_options(DeadZone PRIVATE /W4 /utf-8)

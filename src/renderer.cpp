@@ -11,8 +11,6 @@
 #define BGFX_PLATFORM_SUPPORTS_WGSL 0
 #include <bgfx/embedded_shader.h>
 
-#include <bx/math.h>
-
 #include "spirv/vs_cube.sc.bin.h"
 #include "spirv/fs_cube.sc.bin.h"
 #include "spirv/vs_mesh.sc.bin.h"
@@ -101,7 +99,7 @@ bool Renderer::init(const Window& window) {
     m_height = static_cast<uint32_t>(window.pixelHeight());
     init.swapChain.width  = m_width;
     init.swapChain.height = m_height;
-    init.reset            = BGFX_RESET_VSYNC;
+    init.reset            = m_vsync ? BGFX_RESET_VSYNC : BGFX_RESET_NONE;
 
     if (!bgfx::init(init)) {
         std::fprintf(stderr, "bgfx::init a echoue\n");
@@ -147,7 +145,12 @@ void Renderer::resize(uint32_t width, uint32_t height) {
     bgfx::SwapChain sc; // les champs laisses a leur valeur par defaut restent inchanges
     sc.width  = width;
     sc.height = height;
-    bgfx::reset(BGFX_RESET_VSYNC, &sc);
+    bgfx::reset(m_vsync ? BGFX_RESET_VSYNC : BGFX_RESET_NONE, &sc);
+}
+
+void Renderer::setVsync(bool enabled) {
+    m_vsync = enabled;
+    bgfx::reset(m_vsync ? BGFX_RESET_VSYNC : BGFX_RESET_NONE); // sans SwapChain : la fenetre n'est pas touchee
 }
 
 void Renderer::beginFrame(const Camera& camera) {
@@ -162,9 +165,7 @@ void Renderer::beginFrame(const Camera& camera) {
     bgfx::dbgTextClear();
 }
 
-void Renderer::drawCube(float time) {
-    float world[16];
-    bx::mtxRotateXY(world, time * 0.6f, time * 0.9f);
+void Renderer::drawCube(const float* world) {
     bgfx::setTransform(world);
     bgfx::setVertexBuffer(0, m_cubeVbh);
     bgfx::setIndexBuffer(m_cubeIbh);
@@ -172,9 +173,7 @@ void Renderer::drawCube(float time) {
     bgfx::submit(kMainView, m_cubeProgram);
 }
 
-void Renderer::drawModel(const Model& model, float yaw) {
-    float world[16];
-    bx::mtxRotateXY(world, 0.0f, yaw);
+void Renderer::drawModel(const Model& model, const float* world) {
     const float lightDir[4] = {0.4f, 0.8f, -0.5f, 0.0f};
     for (const MeshPart& part : model.parts()) {
         bgfx::setTransform(world);

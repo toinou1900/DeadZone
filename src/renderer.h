@@ -21,10 +21,14 @@ public:
 
     void resize(uint32_t width, uint32_t height);
 
+    // Synchronisation verticale (limite les FPS a la frequence de l'ecran).
+    void setVsync(bool enabled);
+    bool vsync() const { return m_vsync; }
+
     // Une image = beginFrame -> draw*() / text() -> endFrame
     void beginFrame(const Camera& camera);
-    void drawCube(float time);
-    void drawModel(const Model& model, float yaw);
+    void drawCube(const float* world);                        // `world` : matrice 4x4 (16 floats)
+    void drawModel(const Model& model, const float* world);
     void text(int x, int y, uint8_t attr, const char* format, ...);
     void endFrame();
 
@@ -32,6 +36,7 @@ public:
 
 private:
     bool                     m_initialized = false;
+    bool                     m_vsync       = true;
     uint32_t                 m_width  = 0;
     uint32_t                 m_height = 0;
 

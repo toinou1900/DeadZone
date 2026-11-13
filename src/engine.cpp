@@ -2,11 +2,14 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
+
 bool Engine::init(int argc, char** argv) {
     if (!m_window.create("DeadZone Engine", 1280, 720)) return false;
     if (!m_renderer.init(m_window)) return false;
 
-    if (argc > 1) loadModel(argv[1]);
+    m_scene.createCube("Cube", 0.0f, 0.0f, 0.0f);
+    if (argc > 1) spawnModel(argv[1]);
 
     m_lastTicks = SDL_GetTicks();
     m_running   = true;
@@ -28,7 +31,7 @@ void Engine::run() {
 }
 
 void Engine::shutdown() {
-    m_model.destroy();      // les buffers GPU doivent etre detruits avant bgfx::shutdown()
+    m_scene.clear();        // les buffers GPU des modeles doivent etre detruits avant bgfx::shutdown()
     m_renderer.shutdown();
     m_window.destroy();
 }
@@ -41,9 +44,11 @@ void Engine::handleEvent(const SDL_Event& e) {
     case SDL_EVENT_KEY_DOWN:
         if (e.key.key == SDLK_ESCAPE) m_running = false;
         if (e.key.key == SDLK_R) m_spin = !m_spin;
+        if (e.key.key == SDLK_V) m_renderer.setVsync(!m_renderer.vsync());
+        if (e.key.key == SDLK_DELETE || e.key.key == SDLK_BACKSPACE) m_scene.destroyLastModel();
         break;
     case SDL_EVENT_DROP_FILE:
-        if (e.drop.data) loadModel(e.drop.data);
+        if (e.drop.data) spawnModel(e.drop.data);
         break;
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
         m_renderer.resize(static_cast<uint32_t>(m_window.pixelWidth()),
@@ -71,7 +76,7 @@ void Engine::handleEvent(const SDL_Event& e) {
 }
 
 void Engine::update(float dt) {
-    if (m_spin) m_time += dt;
+    if (m_spin) m_scene.update(dt);
 
     // Deplacement (touches physiques : WASD en QWERTY = ZQSD en AZERTY)
     const bool* keys = SDL_GetKeyboardState(nullptr);
@@ -83,37 +88,58 @@ void Engine::update(float dt) {
 }
 
 void Engine::render(float dt) {
-    m_renderer.beginFrame(m_camera);
+    m_fpsTime += dt;
+    ++m_fpsFrames;
+    if (m_fpsTime >= 0.5f) {
+        m_fps       = static_cast<float>(m_fpsFrames) / m_fpsTime;
+        m_frameMs   = 1000.0f * m_fpsTime / static_cast<float>(m_fpsFrames);
+        m_fpsTime   = 0.0f;
+        m_fpsFrames = 0;
+    }
 
-    if (m_model.valid()) m_renderer.drawModel(m_model, m_time * 0.5f); // plateau tournant
-    else                 m_renderer.drawCube(m_time);                  // cube de test
+    m_renderer.beginFrame(m_camera);
+    m_scene.render(m_renderer);
 
     // --- Texte de debug
     m_renderer.text(1, 1, 0x0f, "DeadZone Engine");
     m_renderer.text(1, 2, 0x07, "Renderer : %s", m_renderer.rendererName());
-    m_renderer.text(1, 3, 0x07, "FPS : %.0f", dt > 0.0f ? 1.0f / dt : 0.0f);
+    m_renderer.text(1, 3, 0x07, "FPS : %.0f (%.1f ms)   Vsync : %s", m_fps, m_frameMs, m_renderer.vsync() ? "on" : "off");
     m_renderer.text(1, 5, 0x07, "ZQSD / WASD : deplacement   Espace / Ctrl : monter / descendre   Shift : vite");
-    m_renderer.text(1, 6, 0x07, "Clic droit maintenu : regarder autour   R : rotation on/off   Echap : quitter");
-    if (m_model.valid()) {
-        m_renderer.text(1, 8, 0x0a, "Modele : %s (%u sommets, %u triangles)", m_modelName.c_str(),
-                        m_model.vertexCount(), m_model.triangleCount());
-    } else {
-        m_renderer.text(1, 8, 0x0e, "Glisse un modele (.fbx .obj .stl .gltf .glb .ply .dae .3ds) sur la fenetre");
+    m_renderer.text(1, 6, 0x07, "Clic droit maintenu : regarder autour   R : rotation   V : vsync on/off   Echap : quitter");
+    m_renderer.text(1, 7, 0x07, "Glisser un modele (.fbx .obj .stl .gltf .glb .ply .dae .3ds) : l'ajouter   Suppr : retirer le dernier");
+
+    int y = 9;
+    m_renderer.text(1, y++, 0x0e, "Scene : %u entites", static_cast<unsigned>(m_scene.entityCount()));
+    const auto& models = m_scene.models();
+    const size_t shown = std::min<size_t>(models.size(), 10);
+    for (size_t i = 0; i < shown; ++i) {
+        const entt::entity e = models[i];
+        const Name&         name = m_scene.registry().get<Name>(e);
+        const MeshRenderer& mr   = m_scene.registry().get<MeshRenderer>(e);
+        m_renderer.text(2, y++, 0x0a, "- %s (%u sommets, %u triangles)", name.value.c_str(),
+                        mr.model->vertexCount(), mr.model->triangleCount());
     }
-    if (!m_modelError.empty()) {
-        m_renderer.text(1, 9, 0x0c, "Erreur : %s", m_modelError.c_str());
-    }
+    if (models.size() > shown) m_renderer.text(2, y++, 0x07, "... et %u autres", static_cast<unsigned>(models.size() - shown));
+    if (!m_error.empty())      m_renderer.text(1, y++, 0x0c, "Erreur : %s", m_error.c_str());
 
     m_renderer.endFrame();
 }
 
-void Engine::loadModel(const std::string& path) {
+void Engine::spawnModel(const std::string& path) {
+    auto model = std::make_shared<Model>();
     std::string err;
-    if (m_model.load(path, err)) {
-        const size_t slash = path.find_last_of("/\\");
-        m_modelName  = (slash == std::string::npos) ? path : path.substr(slash + 1);
-        m_modelError.clear();
-    } else {
-        m_modelError = err;
+    if (!model->load(path, err)) {
+        m_error = err;
+        return;
     }
+    m_error.clear();
+
+    const size_t slash = path.find_last_of("/\\");
+    const std::string name = (slash == std::string::npos) ? path : path.substr(slash + 1);
+
+    // Les modeles s'alignent de part et d'autre du cube : +3, -3, +6, -6, ...
+    const size_t n = m_scene.models().size();
+    const float side = (n % 2 == 0) ? 1.0f : -1.0f;
+    const float x = side * 3.0f * static_cast<float>(n / 2 + 1);
+    m_scene.createModel(std::move(model), name, x, 0.0f, 0.0f);
 }
