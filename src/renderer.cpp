@@ -28,6 +28,7 @@
 
 #include "camera.h"
 #include "model.h"
+#include "texture.h"
 #include "window.h"
 
 #include <cstdarg>
@@ -124,11 +125,17 @@ bool Renderer::init(const Window& window) {
     m_meshProgram = loadProgram("vs_mesh", "fs_mesh");
     m_uLightDir   = bgfx::createUniform("u_lightDir", bgfx::UniformType::Vec4);
     m_uColor      = bgfx::createUniform("u_color",    bgfx::UniformType::Vec4);
+    m_uSampler    = bgfx::createUniform("s_texColor", bgfx::UniformType::Sampler);
+
+    const uint8_t white[4] = {255, 255, 255, 255};
+    m_whiteTexture = createTextureRGBA8(white, 1, 1);
     return true;
 }
 
 void Renderer::shutdown() {
     if (!m_initialized) return;
+    if (bgfx::isValid(m_whiteTexture)) bgfx::destroy(m_whiteTexture);
+    if (bgfx::isValid(m_uSampler))    bgfx::destroy(m_uSampler);
     if (bgfx::isValid(m_uColor))      bgfx::destroy(m_uColor);
     if (bgfx::isValid(m_uLightDir))   bgfx::destroy(m_uLightDir);
     if (bgfx::isValid(m_meshProgram)) bgfx::destroy(m_meshProgram);
@@ -181,6 +188,7 @@ void Renderer::drawModel(const Model& model, const float* world) {
         bgfx::setIndexBuffer(part.ibh);
         bgfx::setUniform(m_uLightDir, lightDir);
         bgfx::setUniform(m_uColor, part.color);
+        bgfx::setTexture(0, m_uSampler, bgfx::isValid(part.tex) ? part.tex : m_whiteTexture);
         // pas de culling : les modeles ont des conventions de sens des faces variables
         bgfx::setState(BGFX_STATE_DEFAULT & ~BGFX_STATE_CULL_MASK);
         bgfx::submit(kMainView, m_meshProgram);

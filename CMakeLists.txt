@@ -64,7 +64,14 @@ if(NOT MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 endif()
 
-FetchContent_MakeAvailable(SDL3 bgfx_cmake assimp EnTT)
+# ------------------------------------------------------------------ stb
+# stb_image : decodage des textures (PNG, JPG, TGA, BMP...), un seul fichier d'en-tete.
+# Version figee sur un commit (le depot n'a pas de tags), donc pas de clone superficiel (GIT_SHALLOW).
+FetchContent_Declare(stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        f88444a1fc5620a30c709a83e5e288bea8470d13)
+
+FetchContent_MakeAvailable(SDL3 bgfx_cmake assimp EnTT stb)
 
 set(CMAKE_C_FLAGS   "${DZ_SAVED_C_FLAGS}")
 set(CMAKE_CXX_FLAGS "${DZ_SAVED_CXX_FLAGS}")
@@ -112,8 +119,9 @@ add_executable(DeadZone
     src/camera.cpp
     src/model.cpp
     src/scene.cpp
+    src/texture.cpp
     ${DZ_VS_FILES} ${DZ_FS_FILES})
-target_include_directories(DeadZone PRIVATE ${DZ_SHADER_OUT})
+target_include_directories(DeadZone PRIVATE ${DZ_SHADER_OUT} ${stb_SOURCE_DIR})
 target_link_libraries(DeadZone PRIVATE SDL3::SDL3 assimp::assimp EnTT::EnTT bgfx bx bimg bimg_decode)
 
 if(WIN32 AND MSVC)

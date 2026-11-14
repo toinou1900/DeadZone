@@ -40,10 +40,20 @@ La premiere configuration telecharge SDL3 et bgfx (plusieurs minutes, c'est norm
 
 ## Charger un modele 3D
 - Glisser-deposer un fichier sur la fenetre, ou : `DeadZone.exe chemin\vers\modele.fbx`
-- Un modele de test est fourni : `assets/torus.obj`
-- Le modele est recentre et mis a l'echelle automatiquement. Les couleurs viennent des matieres
-  du fichier ; les textures ne sont pas encore gerees.
+- Modeles de test fournis : `assets/torus.obj` (gris uni) et `assets/test_cube.obj` (cube texture)
+- Le modele est recentre et mis a l'echelle automatiquement.
 - STL / certains exports sont "Z vers le haut" : le modele peut apparaitre couche (pas encore corrige).
+
+## Textures
+- Textures de couleur (diffuse / base color) : PNG, JPG, TGA, BMP, GIF, PSD, HDR (via stb_image). DDS / KTX : non geres.
+- Textures **integrees** au modele (FBX, GLB...) : lues directement dans le fichier.
+- Textures **externes** : cherchees a cote du modele (chemin relatif), puis par nom de fichier dans le dossier du modele
+  (les FBX contiennent souvent des chemins absolus propres a la machine de l'auteur).
+- Mipmaps generees automatiquement. Un probleme (texture introuvable ou illisible) s'affiche en jaune a l'ecran.
+- `assets/test_cube.png` sert a verifier l'orientation : sur la face avant, le rouge doit etre en haut a gauche,
+  le vert en haut a droite, le bleu en bas a gauche, le jaune en bas a droite, et le "F" doit se lire normalement.
+- Pas encore gere : normal maps, metal / rugosite, transparence, couleur de base glTF (le facteur est ignore
+  quand une texture est presente).
 
 ## Structure du code (src/)
 | Fichier | Role |
@@ -55,7 +65,8 @@ La premiere configuration telecharge SDL3 et bgfx (plusieurs minutes, c'est norm
 | `window.*` | `Window` : fenetre SDL3, handles natifs, capture de la souris |
 | `renderer.*` | `Renderer` : bgfx, shaders integres, dessin (recoit une matrice monde), texte de debug |
 | `camera.*` | `Camera` : camera libre (position, regard, matrices vue/projection) |
-| `model.*` | `Model` : chargement de modeles 3D (Assimp) et buffers GPU |
+| `model.*` | `Model` : chargement de modeles 3D (Assimp), buffers GPU et textures |
+| `texture.*` | Creation de textures GPU : decodage (stb_image) et mipmaps |
 | `../shaders/` | Shaders (.sc), compiles par shaderc pendant le build |
 
 Ordre d'arret important : vider la scene (`Scene::clear`) avant `Renderer::shutdown`, car les modeles liberent leurs buffers GPU.

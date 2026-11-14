@@ -46,4 +46,6 @@ private:
     bgfx::ProgramHandle      m_meshProgram = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle      m_uLightDir   = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle      m_uColor      = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle      m_uSampler    = BGFX_INVALID_HANDLE; // texture de couleur (unite 0)
+    bgfx::TextureHandle      m_whiteTexture = BGFX_INVALID_HANDLE; // 1x1 blanc : utilisee quand la matiere n'a pas de texture
 };

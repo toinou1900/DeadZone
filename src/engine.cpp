@@ -135,8 +135,9 @@ void Engine::render(float dt) {
         const entt::entity e = models[i];
         const Name&         name = m_scene.registry().get<Name>(e);
         const MeshRenderer& mr   = m_scene.registry().get<MeshRenderer>(e);
-        m_renderer.text(2, y++, 0x0a, "- %s (%u sommets, %u triangles)", name.value.c_str(),
-                        mr.model->vertexCount(), mr.model->triangleCount());
+        m_renderer.text(2, y++, 0x0a, "- %s (%u sommets, %u triangles, %u textures)", name.value.c_str(),
+                        mr.model->vertexCount(), mr.model->triangleCount(), mr.model->textureCount());
+        for (const std::string& w : mr.model->warnings()) m_renderer.text(4, y++, 0x0e, "! %s", w.c_str());
     }
     if (models.size() > shown) m_renderer.text(2, y++, 0x07, "... et %u autres", static_cast<unsigned>(models.size() - shown));
     if (!m_error.empty())      m_renderer.text(1, y++, 0x0c, "Erreur : %s", m_error.c_str());
