@@ -1,8 +1,8 @@
 # DeadZone Engine
 
 Squelette : SDL3 (fenetre/entrees) + bgfx (rendu). Cible : Windows et Linux.
-Contenu actuel : un cube 3D, une camera libre et le chargement de modeles 3D via Assimp
-(FBX, OBJ, STL, glTF/GLB, PLY, DAE, 3DS). Shaders dans `shaders/`, compiles au build.
+Contenu actuel : rendu 3D, camera libre, chargement de modeles (Assimp : FBX, OBJ, STL, glTF/GLB, PLY, DAE, 3DS) avec
+textures, ECS (EnTT) et physique (Jolt). Shaders dans `shaders/`, compiles au build.
 
 ## Prerequis
 - CMake >= 3.24, Git
@@ -28,10 +28,12 @@ La premiere configuration telecharge SDL3 et bgfx (plusieurs minutes, c'est norm
 - ZQSD (AZERTY) / WASD (QWERTY) : deplacement (memes touches physiques)
 - Espace / Ctrl gauche : monter / descendre, Shift : plus vite
 - Clic droit maintenu + souris : regarder autour
-- R : arreter / relancer la rotation
+- **B** : lancer une boite devant la camera
+- **P** : mettre la physique en pause / la relancer
+- **R** : reinitialiser la scene (sol + cube)
+- Glisser un modele sur la fenetre : l'ajouter a la scene (il tombe sur le sol)
+- Suppr / Retour arriere : retirer le dernier objet ajoute (modele ou boite)
 - V : activer / couper la synchronisation verticale (vsync)
-- Glisser un modele sur la fenetre : l'ajouter a la scene (autant que voulu)
-- Suppr / Retour arriere : retirer le dernier modele ajoute
 - Echap : quitter
 
 ## Notes
@@ -55,25 +57,39 @@ La premiere configuration telecharge SDL3 et bgfx (plusieurs minutes, c'est norm
 - Pas encore gere : normal maps, metal / rugosite, transparence, couleur de base glTF (le facteur est ignore
   quand une texture est presente).
 
+## Physique (Jolt)
+- Corps rigides en **boite** : gravite, collisions, frottement, rebond. Les modeles 3D utilisent leur **boite englobante**
+  comme forme de collision (pas leur forme exacte).
+- Simulation a **pas fixe de 1/60 s** : le resultat ne depend pas du nombre d'images par seconde.
+- Le sol est un corps fixe (dessus a y = -2). Gravite : 9,81 m/s2 vers -Y. Une unite = un metre.
+- Le composant `RigidBody` decrit le corps ; le corps est cree dans Jolt au premier tour de boucle, puis le moteur
+  physique pilote le `Transform` de l'entite. Detruire l'entite detruit son corps.
+- Pas encore : sphere / capsule / forme exacte, articulations, raycasts, evenements de collision.
+
 ## Structure du code (src/)
 | Fichier | Role |
 |---|---|
 | `main.cpp` | Point d'entree : cree le moteur et le lance |
 | `engine.*` | `Engine` : boucle de jeu, evenements, relie tous les modules |
-| `components.h` | Composants ECS (donnees pures) : `Name`, `Transform`, `Spin`, `MeshRenderer`, `CubeRenderer` |
-| `scene.*` | `Scene` : registre EnTT, creation d'entites et systemes (rotation, rendu) |
+| `components.h` | Composants ECS (donnees pures) : `Name`, `Transform`, `Spin`, `RigidBody`, `MeshRenderer`, `CubeRenderer`, `BoxRenderer` |
+| `transform_math.h` | Maths : quaternions, matrice monde d'un `Transform` |
+| `scene.*` | `Scene` : registre EnTT, creation d'entites et systemes (animation, physique, rendu) |
+| `physics.*` | `Physics` : moteur physique Jolt (corps en boite, pas fixe), cache l'API de Jolt |
 | `window.*` | `Window` : fenetre SDL3, handles natifs, capture de la souris |
-| `renderer.*` | `Renderer` : bgfx, shaders integres, dessin (recoit une matrice monde), texte de debug |
+| `renderer.*` | `Renderer` : bgfx, shaders integres, dessin du cube / des boites / des modeles (recoit une matrice monde), texte de debug |
 | `camera.*` | `Camera` : camera libre (position, regard, matrices vue/projection) |
 | `model.*` | `Model` : chargement de modeles 3D (Assimp), buffers GPU et textures |
 | `texture.*` | Creation de textures GPU : decodage (stb_image) et mipmaps |
 | `../shaders/` | Shaders (.sc), compiles par shaderc pendant le build |
 
-Ordre d'arret important : vider la scene (`Scene::clear`) avant `Renderer::shutdown`, car les modeles liberent leurs buffers GPU.
+Ordre d'arret important : vider la scene (`Scene::clear`) avant `Physics::shutdown` et `Renderer::shutdown` (les corps
+physiques et les buffers GPU des modeles sont liberes a ce moment).
 
 ## ECS (EnTT)
 - **Entite** : un simple identifiant. **Composant** : des donnees (`components.h`). **Systeme** : une fonction qui
   parcourt les entites ayant certains composants (`scene.cpp`).
-- Systemes actuels : `spinSystem` (Transform + Spin) et `renderSystem` (Transform + MeshRenderer / CubeRenderer).
+- Systemes actuels : `createBodiesSystem`, `syncTransformsSystem` (physique), `spinSystem` (animation des entites
+  sans corps physique) et `renderSystem` (Transform + MeshRenderer / CubeRenderer / BoxRenderer).
+- `Transform` stocke l'orientation en **quaternion** (x, y, z, w), comme Jolt.
 - Pour ajouter un comportement : creer un composant, l'attacher a des entites, ecrire un systeme et l'appeler dans
   `Scene::update` ou `Scene::render`.

@@ -1,12 +1,14 @@
-// DeadZone Engine - le moteur : relie fenetre, rendu, camera et scene (ECS), et fait tourner la boucle de jeu
+// DeadZone Engine - le moteur : relie fenetre, rendu, physique, camera et scene (ECS), et fait tourner la boucle de jeu
 #pragma once
 
 #include "camera.h"
+#include "physics.h"
 #include "renderer.h"
 #include "scene.h"
 #include "window.h"
 
 #include <cstdint>
+#include <random>
 #include <string>
 
 union SDL_Event;
@@ -26,24 +28,29 @@ private:
     void handleEvent(const SDL_Event& e);
     void update(float dt);
     void render(float dt);
+    void buildDefaultScene();                 // sol + cube
     void spawnModel(const std::string& path); // charge un fichier et cree une entite dans la scene
+    void throwBox();                          // lance une boite devant la camera
 
     Window   m_window;
     Renderer m_renderer;
+    Physics  m_physics;
     Camera   m_camera;
     Scene    m_scene;
 
-    std::string m_error;
+    std::string  m_error;
+    std::mt19937 m_rng{12345};
 
-    bool     m_running   = false;
-    bool     m_mouseLook = false;
-    bool     m_spin      = true;
-    bool     m_minimized = false; // fenetre reduite : on met le rendu en pause
+    bool     m_running       = false;
+    bool     m_mouseLook     = false;
+    bool     m_minimized     = false; // fenetre reduite : on met le rendu en pause
+    bool     m_physicsPaused = false;
+    uint64_t m_lastTicks     = 0;
+    unsigned m_throwCount    = 0;
 
     // Compteur de FPS lisse (moyenne sur ~0,5 s) : l'image par image est trop instable pour etre lisible.
     float    m_fpsTime   = 0.0f;
     int      m_fpsFrames = 0;
     float    m_fps       = 0.0f;
     float    m_frameMs   = 0.0f;
-    uint64_t m_lastTicks = 0;
 };

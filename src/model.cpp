@@ -205,6 +205,7 @@ bool Model::load(const std::string& path, std::string& error) {
 
     // 3) Cree les ressources GPU (le nouveau modele remplace l'ancien seulement a ce stade)
     destroy();
+    for (int k = 0; k < 3; ++k) m_halfExtents[k] = 0.5f * (mx[k] - mn[k]) * scale;
     const std::string modelDir = dirName(path);
     std::map<std::string, bgfx::TextureHandle> textureCache; // une meme texture n'est creee qu'une fois
     const bgfx::VertexLayout layout = makeLayout();

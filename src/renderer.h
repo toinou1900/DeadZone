@@ -27,7 +27,9 @@ public:
 
     // Une image = beginFrame -> draw*() / text() -> endFrame
     void beginFrame(const Camera& camera);
-    void drawCube(const float* world);                        // `world` : matrice 4x4 (16 floats)
+    // `world` : matrice monde 4x4 (16 floats). Le cube et la boite de base mesurent 2 x 2 x 2 (demi-taille 1).
+    void drawCube(const float* world);                        // cube colore par sommets
+    void drawBox(const float* world, const float color[4], bool checker, float repeat); // boite eclairee unie / damier
     void drawModel(const Model& model, const float* world);
     void text(int x, int y, uint8_t attr, const char* format, ...);
     void endFrame();
@@ -48,4 +50,8 @@ private:
     bgfx::UniformHandle      m_uColor      = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle      m_uSampler    = BGFX_INVALID_HANDLE; // texture de couleur (unite 0)
     bgfx::TextureHandle      m_whiteTexture = BGFX_INVALID_HANDLE; // 1x1 blanc : utilisee quand la matiere n'a pas de texture
+    bgfx::TextureHandle      m_checkerTexture = BGFX_INVALID_HANDLE; // damier (sol)
+    bgfx::UniformHandle      m_uUvScale    = BGFX_INVALID_HANDLE; // repetition de la texture
+    bgfx::VertexBufferHandle m_boxVbh      = BGFX_INVALID_HANDLE;
+    bgfx::IndexBufferHandle  m_boxIbh      = BGFX_INVALID_HANDLE;
 };

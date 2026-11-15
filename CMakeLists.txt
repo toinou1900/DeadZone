@@ -71,7 +71,31 @@ FetchContent_Declare(stb
     GIT_REPOSITORY https://github.com/nothings/stb.git
     GIT_TAG        f88444a1fc5620a30c709a83e5e288bea8470d13)
 
-FetchContent_MakeAvailable(SDL3 bgfx_cmake assimp EnTT stb)
+# ---------------------------------------------------------------- Jolt
+# Moteur physique. On ne construit que la bibliotheque (pas les exemples, tests, viewer).
+set(TARGET_UNIT_TESTS       OFF CACHE BOOL "" FORCE)
+set(TARGET_HELLO_WORLD      OFF CACHE BOOL "" FORCE)
+set(TARGET_PERFORMANCE_TEST OFF CACHE BOOL "" FORCE)
+set(TARGET_SAMPLES          OFF CACHE BOOL "" FORCE)
+set(TARGET_VIEWER           OFF CACHE BOOL "" FORCE)
+set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "" FORCE) # compilation beaucoup plus rapide
+set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)           # par defaut Jolt traite les avertissements comme des erreurs
+set(ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(FLOATING_POINT_EXCEPTIONS_ENABLED OFF CACHE BOOL "" FORCE) # sinon un calcul flottant douteux peut faire planter le programme
+# Windows : utiliser la meme bibliotheque C++ (DLL) que le reste du projet. Par defaut Jolt prend la version statique,
+# ce qui provoque des erreurs a l'edition de liens.
+set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
+# Instructions CPU : on reste sur le minimum largement repandu (SSE 4.2) pour que le programme tourne sur tous les PC.
+foreach(opt USE_AVX USE_AVX2 USE_AVX512 USE_LZCNT USE_TZCNT USE_F16C USE_FMADD)
+    set(${opt} OFF CACHE BOOL "" FORCE)
+endforeach()
+FetchContent_Declare(JoltPhysics
+    GIT_REPOSITORY https://github.com/jrouwe/JoltPhysics.git
+    GIT_TAG        v5.5.0
+    GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR  Build) # le CMakeLists.txt de Jolt est dans le sous-dossier Build
+
+FetchContent_MakeAvailable(SDL3 bgfx_cmake assimp EnTT stb JoltPhysics)
 
 set(CMAKE_C_FLAGS   "${DZ_SAVED_C_FLAGS}")
 set(CMAKE_CXX_FLAGS "${DZ_SAVED_CXX_FLAGS}")
@@ -119,10 +143,11 @@ add_executable(DeadZone
     src/camera.cpp
     src/model.cpp
     src/scene.cpp
+    src/physics.cpp
     src/texture.cpp
     ${DZ_VS_FILES} ${DZ_FS_FILES})
 target_include_directories(DeadZone PRIVATE ${DZ_SHADER_OUT} ${stb_SOURCE_DIR})
-target_link_libraries(DeadZone PRIVATE SDL3::SDL3 assimp::assimp EnTT::EnTT bgfx bx bimg bimg_decode)
+target_link_libraries(DeadZone PRIVATE SDL3::SDL3 assimp::assimp EnTT::EnTT Jolt bgfx bx bimg bimg_decode)
 
 if(WIN32 AND MSVC)
     target_compile_options(DeadZone PRIVATE /W4 /utf-8)

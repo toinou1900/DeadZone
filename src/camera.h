@@ -10,6 +10,10 @@ public:
     // `right` reste horizontal, `up` est vertical. Valeurs deja multipliees par vitesse * dt.
     void move(float forward, float right, float up);
 
+    // Position de la camera et direction du regard (vecteur unitaire).
+    void position(float out[3]) const { out[0] = m_x; out[1] = m_y; out[2] = m_z; }
+    void forward(float out[3]) const;
+
     // Matrices pour bgfx (tableaux de 16 floats).
     void viewMatrix(float* out) const;
     void projMatrix(float* out, float aspect, bool homogeneousDepth) const;

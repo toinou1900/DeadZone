@@ -30,6 +30,12 @@ void Camera::move(float forward, float right, float up) {
     m_z += fz * forward + rz * right;
 }
 
+void Camera::forward(float out[3]) const {
+    out[0] = std::cos(m_pitch) * std::sin(m_yaw);
+    out[1] = std::sin(m_pitch);
+    out[2] = std::cos(m_pitch) * std::cos(m_yaw);
+}
+
 void Camera::viewMatrix(float* out) const {
     const float fx = std::cos(m_pitch) * std::sin(m_yaw);
     const float fy = std::sin(m_pitch);

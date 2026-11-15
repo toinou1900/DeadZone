@@ -35,6 +35,8 @@ public:
     uint32_t                        vertexCount() const   { return m_vertexCount; }
     uint32_t                        triangleCount() const { return m_triangleCount; }
     uint32_t                        textureCount() const  { return static_cast<uint32_t>(m_textures.size()); }
+    // Demi-dimensions de la boite englobante, une fois le modele recentre et mis a l'echelle (sert aux collisions).
+    const float*                    halfExtents() const   { return m_halfExtents; }
     // Problemes non bloquants rencontres au chargement (ex. texture introuvable).
     const std::vector<std::string>& warnings() const      { return m_warnings; }
 
@@ -42,6 +44,7 @@ private:
     std::vector<MeshPart>            m_parts;
     std::vector<bgfx::TextureHandle> m_textures; // proprietaire des textures (les MeshPart y font reference)
     std::vector<std::string>         m_warnings;
+    float                            m_halfExtents[3] = {1.0f, 1.0f, 1.0f};
     uint32_t                         m_vertexCount   = 0;
     uint32_t                         m_triangleCount = 0;
 };

@@ -79,6 +79,39 @@ const uint16_t kCubeIndices[] = {
     2, 3, 6, 6, 3, 7,
 };
 
+// ---- Boite eclairee (meme format de sommets que les modeles : position, normale, UV)
+struct BoxVertex {
+    float x, y, z;
+    float nx, ny, nz;
+    float u, v;
+};
+
+BoxVertex kBoxVertices[24];
+uint16_t  kBoxIndices[36];
+
+void buildBox() {
+    // Pour chaque face : 4 coins (sens anti-horaire vu de l'exterieur) et la normale.
+    const float faces[6][4][3] = {
+        {{-1,-1, 1}, { 1,-1, 1}, { 1, 1, 1}, {-1, 1, 1}}, // +Z
+        {{ 1,-1,-1}, {-1,-1,-1}, {-1, 1,-1}, { 1, 1,-1}}, // -Z
+        {{ 1,-1, 1}, { 1,-1,-1}, { 1, 1,-1}, { 1, 1, 1}}, // +X
+        {{-1,-1,-1}, {-1,-1, 1}, {-1, 1, 1}, {-1, 1,-1}}, // -X
+        {{-1, 1, 1}, { 1, 1, 1}, { 1, 1,-1}, {-1, 1,-1}}, // +Y (dessus)
+        {{-1,-1,-1}, { 1,-1,-1}, { 1,-1, 1}, {-1,-1, 1}}, // -Y
+    };
+    const float normals[6][3] = {{0,0,1}, {0,0,-1}, {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}};
+    const float uvs[4][2] = {{0,0}, {1,0}, {1,1}, {0,1}};
+    for (int f = 0; f < 6; ++f) {
+        for (int c = 0; c < 4; ++c) {
+            kBoxVertices[f * 4 + c] = {faces[f][c][0], faces[f][c][1], faces[f][c][2],
+                                       normals[f][0], normals[f][1], normals[f][2], uvs[c][0], uvs[c][1]};
+        }
+        const uint16_t b = static_cast<uint16_t>(f * 4);
+        const uint16_t idx[6] = {b, uint16_t(b + 1), uint16_t(b + 2), b, uint16_t(b + 2), uint16_t(b + 3)};
+        for (int i = 0; i < 6; ++i) kBoxIndices[f * 6 + i] = idx[i];
+    }
+}
+
 } // namespace
 
 bool Renderer::init(const Window& window) {
@@ -127,14 +160,43 @@ bool Renderer::init(const Window& window) {
     m_uColor      = bgfx::createUniform("u_color",    bgfx::UniformType::Vec4);
     m_uSampler    = bgfx::createUniform("s_texColor", bgfx::UniformType::Sampler);
 
+    m_uUvScale    = bgfx::createUniform("u_uvScale",  bgfx::UniformType::Vec4);
+
     const uint8_t white[4] = {255, 255, 255, 255};
     m_whiteTexture = createTextureRGBA8(white, 1, 1);
+
+    // Damier 2 x 2 cases (64 x 64 pixels), repete sur le sol : donne un repere pour voir les mouvements.
+    uint8_t checker[64 * 64 * 4];
+    for (int y = 0; y < 64; ++y) {
+        for (int x = 0; x < 64; ++x) {
+            const bool light = ((x / 32) + (y / 32)) % 2 == 0;
+            const uint8_t v = light ? 255 : 175;
+            uint8_t* p = checker + (y * 64 + x) * 4;
+            p[0] = v; p[1] = v; p[2] = v; p[3] = 255;
+        }
+    }
+    m_checkerTexture = createTextureRGBA8(checker, 64, 64);
+
+    // Boite eclairee
+    buildBox();
+    bgfx::VertexLayout boxLayout;
+    boxLayout.begin()
+        .add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
+        .end();
+    m_boxVbh = bgfx::createVertexBuffer(bgfx::makeRef(kBoxVertices, sizeof(kBoxVertices)), boxLayout);
+    m_boxIbh = bgfx::createIndexBuffer(bgfx::makeRef(kBoxIndices, sizeof(kBoxIndices)));
     return true;
 }
 
 void Renderer::shutdown() {
     if (!m_initialized) return;
+    if (bgfx::isValid(m_boxIbh))       bgfx::destroy(m_boxIbh);
+    if (bgfx::isValid(m_boxVbh))       bgfx::destroy(m_boxVbh);
+    if (bgfx::isValid(m_checkerTexture)) bgfx::destroy(m_checkerTexture);
     if (bgfx::isValid(m_whiteTexture)) bgfx::destroy(m_whiteTexture);
+    if (bgfx::isValid(m_uUvScale))    bgfx::destroy(m_uUvScale);
     if (bgfx::isValid(m_uSampler))    bgfx::destroy(m_uSampler);
     if (bgfx::isValid(m_uColor))      bgfx::destroy(m_uColor);
     if (bgfx::isValid(m_uLightDir))   bgfx::destroy(m_uLightDir);
@@ -180,14 +242,30 @@ void Renderer::drawCube(const float* world) {
     bgfx::submit(kMainView, m_cubeProgram);
 }
 
+void Renderer::drawBox(const float* world, const float color[4], bool checker, float repeat) {
+    const float lightDir[4] = {0.4f, 0.8f, -0.5f, 0.0f};
+    const float uvScale[4]  = {repeat, repeat, 0.0f, 0.0f};
+    bgfx::setTransform(world);
+    bgfx::setVertexBuffer(0, m_boxVbh);
+    bgfx::setIndexBuffer(m_boxIbh);
+    bgfx::setUniform(m_uLightDir, lightDir);
+    bgfx::setUniform(m_uColor, color);
+    bgfx::setUniform(m_uUvScale, uvScale);
+    bgfx::setTexture(0, m_uSampler, checker ? m_checkerTexture : m_whiteTexture);
+    bgfx::setState(BGFX_STATE_DEFAULT & ~BGFX_STATE_CULL_MASK);
+    bgfx::submit(kMainView, m_meshProgram);
+}
+
 void Renderer::drawModel(const Model& model, const float* world) {
     const float lightDir[4] = {0.4f, 0.8f, -0.5f, 0.0f};
+    const float uvScale[4]  = {1.0f, 1.0f, 0.0f, 0.0f};
     for (const MeshPart& part : model.parts()) {
         bgfx::setTransform(world);
         bgfx::setVertexBuffer(0, part.vbh);
         bgfx::setIndexBuffer(part.ibh);
         bgfx::setUniform(m_uLightDir, lightDir);
         bgfx::setUniform(m_uColor, part.color);
+        bgfx::setUniform(m_uUvScale, uvScale);
         bgfx::setTexture(0, m_uSampler, bgfx::isValid(part.tex) ? part.tex : m_whiteTexture);
         // pas de culling : les modeles ont des conventions de sens des faces variables
         bgfx::setState(BGFX_STATE_DEFAULT & ~BGFX_STATE_CULL_MASK);

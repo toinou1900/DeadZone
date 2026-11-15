@@ -3,10 +3,12 @@ $output v_normal, v_texcoord0
 
 #include <bgfx_shader.sh>
 
+uniform vec4 u_uvScale; // xy : repetition de la texture (1,1 = normal)
+
 void main()
 {
 	gl_Position = mul(u_modelViewProj, vec4(a_position, 1.0));
 	// normale dans le repere du monde (pour l'eclairage)
 	v_normal = normalize(mul(u_model[0], vec4(a_normal, 0.0)).xyz);
-	v_texcoord0 = a_texcoord0;
+	v_texcoord0 = a_texcoord0 * u_uvScale.xy;
 }

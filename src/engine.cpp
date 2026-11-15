@@ -8,13 +8,24 @@ namespace {
 // Duree maximale d'une image (secondes) pour la simulation. Si la fenetre a ete cachee ou le programme
 // bloque un moment, la premiere image au retour aurait un `dt` enorme : tout sauterait d'un coup.
 constexpr float kMaxDt = 0.1f;
+
+constexpr float kThrowSpeed = 16.0f;
+constexpr float kBoxHalfSize = 0.3f;
+
+// Couleurs des boites lancees (on boucle dessus)
+const float kBoxColors[6][4] = {
+    {0.90f, 0.35f, 0.35f, 1.0f}, {0.35f, 0.75f, 0.45f, 1.0f}, {0.35f, 0.55f, 0.90f, 1.0f},
+    {0.95f, 0.80f, 0.30f, 1.0f}, {0.75f, 0.45f, 0.90f, 1.0f}, {0.30f, 0.85f, 0.85f, 1.0f},
+};
 } // namespace
 
 bool Engine::init(int argc, char** argv) {
     if (!m_window.create("DeadZone Engine", 1280, 720)) return false;
     if (!m_renderer.init(m_window)) return false;
+    if (!m_physics.init()) return false;
+    m_scene.setPhysics(&m_physics);
 
-    m_scene.createCube("Cube", 0.0f, 0.0f, 0.0f);
+    buildDefaultScene();
     if (argc > 1) spawnModel(argv[1]);
 
     m_lastTicks = SDL_GetTicks();
@@ -42,9 +53,15 @@ void Engine::run() {
 }
 
 void Engine::shutdown() {
-    m_scene.clear();        // les buffers GPU des modeles doivent etre detruits avant bgfx::shutdown()
+    m_scene.clear();        // retire les corps physiques et libere les buffers GPU des modeles (avant l'arret de bgfx)
+    m_physics.shutdown();
     m_renderer.shutdown();
     m_window.destroy();
+}
+
+void Engine::buildDefaultScene() {
+    m_scene.createFloor();
+    m_scene.createCube("Cube", 0.0f, 3.0f, 0.0f); // tombe sur le sol au demarrage
 }
 
 void Engine::handleEvent(const SDL_Event& e) {
@@ -53,10 +70,13 @@ void Engine::handleEvent(const SDL_Event& e) {
         m_running = false;
         break;
     case SDL_EVENT_KEY_DOWN:
+        if (e.key.repeat) break; // ignore la repetition automatique quand une touche reste enfoncee
         if (e.key.key == SDLK_ESCAPE) m_running = false;
-        if (e.key.key == SDLK_R) m_spin = !m_spin;
+        if (e.key.key == SDLK_B) throwBox();
+        if (e.key.key == SDLK_P) m_physicsPaused = !m_physicsPaused;
         if (e.key.key == SDLK_V) m_renderer.setVsync(!m_renderer.vsync());
-        if (e.key.key == SDLK_DELETE || e.key.key == SDLK_BACKSPACE) m_scene.destroyLastModel();
+        if (e.key.key == SDLK_R) { m_scene.clear(); buildDefaultScene(); m_error.clear(); m_throwCount = 0; }
+        if (e.key.key == SDLK_DELETE || e.key.key == SDLK_BACKSPACE) m_scene.destroyLastSpawned();
         break;
     case SDL_EVENT_DROP_FILE:
         if (e.drop.data) spawnModel(e.drop.data);
@@ -95,7 +115,8 @@ void Engine::handleEvent(const SDL_Event& e) {
 }
 
 void Engine::update(float dt) {
-    if (m_spin) m_scene.update(dt);
+    m_scene.update(dt);                              // animations
+    if (!m_physicsPaused) m_scene.updatePhysics(dt); // physique
 
     // Deplacement (touches physiques : WASD en QWERTY = ZQSD en AZERTY)
     const bool* keys = SDL_GetKeyboardState(nullptr);
@@ -123,12 +144,13 @@ void Engine::render(float dt) {
     m_renderer.text(1, 1, 0x0f, "DeadZone Engine");
     m_renderer.text(1, 2, 0x07, "Renderer : %s", m_renderer.rendererName());
     m_renderer.text(1, 3, 0x07, "FPS : %.0f (%.1f ms)   Vsync : %s", m_fps, m_frameMs, m_renderer.vsync() ? "on" : "off");
-    m_renderer.text(1, 5, 0x07, "ZQSD / WASD : deplacement   Espace / Ctrl : monter / descendre   Shift : vite");
-    m_renderer.text(1, 6, 0x07, "Clic droit maintenu : regarder autour   R : rotation   V : vsync on/off   Echap : quitter");
-    m_renderer.text(1, 7, 0x07, "Glisser un modele (.fbx .obj .stl .gltf .glb .ply .dae .3ds) : l'ajouter   Suppr : retirer le dernier");
+    m_renderer.text(1, 5, 0x07, "ZQSD / WASD : deplacement   Espace / Ctrl : monter / descendre   Shift : vite   Clic droit maintenu : regarder");
+    m_renderer.text(1, 6, 0x07, "B : lancer une boite   P : pause physique   R : reinitialiser   V : vsync   Suppr : retirer le dernier   Echap : quitter");
+    m_renderer.text(1, 7, 0x07, "Glisser un modele (.fbx .obj .stl .gltf .glb .ply .dae .3ds) sur la fenetre : l'ajouter a la scene");
 
     int y = 9;
-    m_renderer.text(1, y++, 0x0e, "Scene : %u entites", static_cast<unsigned>(m_scene.entityCount()));
+    m_renderer.text(1, y++, 0x0e, "Scene : %u entites, %u corps physiques%s", static_cast<unsigned>(m_scene.entityCount()),
+                    m_physics.bodyCount(), m_physicsPaused ? "   [PHYSIQUE EN PAUSE]" : "");
     const auto& models = m_scene.models();
     const size_t shown = std::min<size_t>(models.size(), 10);
     for (size_t i = 0; i < shown; ++i) {
@@ -157,9 +179,24 @@ void Engine::spawnModel(const std::string& path) {
     const size_t slash = path.find_last_of("/\\");
     const std::string name = (slash == std::string::npos) ? path : path.substr(slash + 1);
 
-    // Les modeles s'alignent de part et d'autre du cube : +3, -3, +6, -6, ...
+    // Les modeles apparaissent en hauteur, de part et d'autre du cube : +3, -3, +6, -6, ... puis tombent.
     const size_t n = m_scene.models().size();
     const float side = (n % 2 == 0) ? 1.0f : -1.0f;
     const float x = side * 3.0f * static_cast<float>(n / 2 + 1);
-    m_scene.createModel(std::move(model), name, x, 0.0f, 0.0f);
+    m_scene.createModel(std::move(model), name, x, 3.0f, 0.0f);
+}
+
+void Engine::throwBox() {
+    float pos[3], fwd[3];
+    m_camera.position(pos);
+    m_camera.forward(fwd);
+
+    float start[3], velocity[3], spin[3];
+    std::uniform_real_distribution<float> spinDist(-4.0f, 4.0f);
+    for (int i = 0; i < 3; ++i) {
+        start[i]    = pos[i] + fwd[i] * 3.0f;
+        velocity[i] = fwd[i] * kThrowSpeed;
+        spin[i]     = spinDist(m_rng);
+    }
+    m_scene.createBox(start, velocity, spin, kBoxHalfSize, kBoxColors[m_throwCount++ % 6]);
 }

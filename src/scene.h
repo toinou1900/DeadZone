@@ -9,20 +9,32 @@
 #include <string>
 #include <vector>
 
+class Physics;
 class Renderer;
 
 class Scene {
 public:
-    // --- Creation d'entites
+    Scene() = default;
+    Scene(const Scene&)            = delete;
+    Scene& operator=(const Scene&) = delete;
+
+    // Moteur physique utilise par updatePhysics(). Doit rester valide tant que la scene contient des corps.
+    void setPhysics(Physics* physics);
+
+    // --- Creation d'entites (tous les objets "dynamiques" tombent et rebondissent)
+    entt::entity createFloor();
     entt::entity createCube(const std::string& name, float x, float y, float z);
     entt::entity createModel(std::shared_ptr<Model> model, const std::string& name, float x, float y, float z);
+    entt::entity createBox(const float position[3], const float velocity[3], const float angularVelocity[3],
+                           float halfSize, const float color[4]);
 
-    // Supprime le dernier modele ajoute (les cubes ne sont pas concernes). Retourne false s'il n'y en a pas.
-    bool destroyLastModel();
-    void clear(); // detruit toutes les entites (les modeles sont liberes quand plus aucune entite ne les utilise)
+    // Supprime le dernier objet ajoute par l'utilisateur (modele ou boite lancee). Retourne false s'il n'y en a pas.
+    bool destroyLastSpawned();
+    void clear(); // detruit toutes les entites (et leurs corps physiques)
 
     // --- Systemes
-    void update(float dt);       // fait tourner les entites qui ont un composant Spin
+    void update(float dt);        // animations (Spin) des entites sans corps physique
+    void updatePhysics(float dt); // cree les corps manquants, avance la simulation, recopie les positions
     void render(Renderer& renderer);
 
     // --- Acces
@@ -31,6 +43,11 @@ public:
     const entt::registry& registry() const { return m_registry; }
 
 private:
+    void onRigidBodyDestroyed(entt::registry& registry, entt::entity entity);
+
     entt::registry            m_registry;
-    std::vector<entt::entity> m_models;
+    std::vector<entt::entity> m_models;  // modeles 3D charges (pour l'affichage)
+    std::vector<entt::entity> m_spawned; // objets ajoutes par l'utilisateur, dans l'ordre (pour "retirer le dernier")
+    Physics*                  m_physics = nullptr;
+    bool                      m_hookConnected = false;
 };
