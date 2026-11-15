@@ -20,8 +20,10 @@ void spinSystem(entt::registry& registry, float dt) {
 }
 
 // Systeme : cree dans le moteur physique le corps des entites qui n'en ont pas encore.
-void createBodiesSystem(entt::registry& registry, Physics& physics) {
-    registry.view<Transform, RigidBody>().each([&](const Transform& t, RigidBody& rb) {
+// Retourne les entites dont le corps n'a pas pu etre cree (moteur plein) : sans corps, elles resteraient figees.
+std::vector<entt::entity> createBodiesSystem(entt::registry& registry, Physics& physics) {
+    std::vector<entt::entity> failed;
+    registry.view<Transform, RigidBody>().each([&](entt::entity entity, const Transform& t, RigidBody& rb) {
         if (rb.body != RigidBody::kNoBody) return;
         BoxBodyDesc d;
         for (int i = 0; i < 3; ++i) {
@@ -35,7 +37,9 @@ void createBodiesSystem(entt::registry& registry, Physics& physics) {
         d.friction    = rb.friction;
         d.restitution = rb.restitution;
         rb.body = physics.createBox(d);
+        if (rb.body == RigidBody::kNoBody) failed.push_back(entity);
     });
+    return failed;
 }
 
 // Systeme : recopie la position et l'orientation calculees par la physique dans le Transform (corps dynamiques).
@@ -158,11 +162,14 @@ entt::entity Scene::createBox(const float position[3], const float velocity[3], 
 
 bool Scene::destroyLastSpawned() {
     if (m_spawned.empty()) return false;
-    const entt::entity e = m_spawned.back();
-    m_spawned.pop_back();
-    m_models.erase(std::remove(m_models.begin(), m_models.end(), e), m_models.end());
-    m_registry.destroy(e);
+    removeEntity(m_spawned.back());
     return true;
+}
+
+void Scene::removeEntity(entt::entity entity) {
+    m_spawned.erase(std::remove(m_spawned.begin(), m_spawned.end(), entity), m_spawned.end());
+    m_models.erase(std::remove(m_models.begin(), m_models.end(), entity), m_models.end());
+    m_registry.destroy(entity);
 }
 
 void Scene::clear() {
@@ -184,7 +191,7 @@ void Scene::update(float dt) {
 
 void Scene::updatePhysics(float dt) {
     if (!m_physics) return;
-    createBodiesSystem(m_registry, *m_physics);
+    for (const entt::entity e : createBodiesSystem(m_registry, *m_physics)) removeEntity(e); // moteur plein
     m_physics->update(dt);
     syncTransformsSystem(m_registry, *m_physics);
 }

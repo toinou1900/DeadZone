@@ -31,6 +31,7 @@ private:
     void buildDefaultScene();                 // sol + cube
     void spawnModel(const std::string& path); // charge un fichier et cree une entite dans la scene
     void throwBox();                          // lance une boite devant la camera
+    bool checkPhysicsCapacity();              // false (et message d'erreur) si le moteur physique est plein
 
     Window   m_window;
     Renderer m_renderer;

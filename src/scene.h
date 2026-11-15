@@ -44,6 +44,7 @@ public:
 
 private:
     void onRigidBodyDestroyed(entt::registry& registry, entt::entity entity);
+    void removeEntity(entt::entity entity); // detruit l'entite et la retire des listes
 
     entt::registry            m_registry;
     std::vector<entt::entity> m_models;  // modeles 3D charges (pour l'affichage)

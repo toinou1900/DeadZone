@@ -18,6 +18,7 @@ struct BoxBodyDesc {
 class Physics {
 public:
     static constexpr uint32_t kInvalidBody = 0xFFFFFFFFu;
+    static constexpr uint32_t kMaxBodies   = 10240; // nombre maximal de corps simultanes (fixe a l'initialisation)
 
     Physics();
     ~Physics();
@@ -27,7 +28,7 @@ public:
     bool init();
     void shutdown(); // detruit tous les corps
 
-    // Cree un corps en boite. Retourne kInvalidBody si le moteur est plein.
+    // Cree un corps en boite. Retourne kInvalidBody si le moteur est plein (kMaxBodies corps).
     uint32_t createBox(const BoxBodyDesc& desc);
     void     destroyBody(uint32_t body);
 

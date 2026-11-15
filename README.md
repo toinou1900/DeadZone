@@ -64,6 +64,8 @@ La premiere configuration telecharge SDL3 et bgfx (plusieurs minutes, c'est norm
 - Le sol est un corps fixe (dessus a y = -2). Gravite : 9,81 m/s2 vers -Y. Une unite = un metre.
 - Le composant `RigidBody` decrit le corps ; le corps est cree dans Jolt au premier tour de boucle, puis le moteur
   physique pilote le `Transform` de l'entite. Detruire l'entite detruit son corps.
+- Capacite : jusqu'a **10 240 corps** simultanes. Au-dela, B et le glisser-deposer sont refuses avec un message
+  (Suppr ou R pour en retirer).
 - Pas encore : sphere / capsule / forme exacte, articulations, raycasts, evenements de collision.
 
 ## Structure du code (src/)

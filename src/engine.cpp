@@ -149,8 +149,8 @@ void Engine::render(float dt) {
     m_renderer.text(1, 7, 0x07, "Glisser un modele (.fbx .obj .stl .gltf .glb .ply .dae .3ds) sur la fenetre : l'ajouter a la scene");
 
     int y = 9;
-    m_renderer.text(1, y++, 0x0e, "Scene : %u entites, %u corps physiques%s", static_cast<unsigned>(m_scene.entityCount()),
-                    m_physics.bodyCount(), m_physicsPaused ? "   [PHYSIQUE EN PAUSE]" : "");
+    m_renderer.text(1, y++, 0x0e, "Scene : %u entites, %u / %u corps physiques%s", static_cast<unsigned>(m_scene.entityCount()),
+                    m_physics.bodyCount(), Physics::kMaxBodies, m_physicsPaused ? "   [PHYSIQUE EN PAUSE]" : "");
     const auto& models = m_scene.models();
     const size_t shown = std::min<size_t>(models.size(), 10);
     for (size_t i = 0; i < shown; ++i) {
@@ -167,7 +167,15 @@ void Engine::render(float dt) {
     m_renderer.endFrame();
 }
 
+// Il reste de la place dans le moteur physique ? Sinon, affiche un message et refuse l'ajout.
+bool Engine::checkPhysicsCapacity() {
+    if (m_physics.bodyCount() < Physics::kMaxBodies) return true;
+    m_error = "Limite de " + std::to_string(Physics::kMaxBodies) + " corps physiques atteinte (Suppr ou R pour en retirer)";
+    return false;
+}
+
 void Engine::spawnModel(const std::string& path) {
+    if (!checkPhysicsCapacity()) return;
     auto model = std::make_shared<Model>();
     std::string err;
     if (!model->load(path, err)) {
@@ -187,6 +195,7 @@ void Engine::spawnModel(const std::string& path) {
 }
 
 void Engine::throwBox() {
+    if (!checkPhysicsCapacity()) return;
     float pos[3], fwd[3];
     m_camera.position(pos);
     m_camera.forward(fwd);
@@ -198,5 +207,6 @@ void Engine::throwBox() {
         velocity[i] = fwd[i] * kThrowSpeed;
         spin[i]     = spinDist(m_rng);
     }
+    m_error.clear();
     m_scene.createBox(start, velocity, spin, kBoxHalfSize, kBoxColors[m_throwCount++ % 6]);
 }

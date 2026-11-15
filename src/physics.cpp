@@ -59,14 +59,17 @@ public:
 
 constexpr float    kFixedStep      = 1.0f / 60.0f;
 constexpr int      kMaxStepsPerCall = 5;   // au-dela, on abandonne le retard plutot que de s'effondrer ("spirale de la mort")
-constexpr JPH::uint kMaxBodies     = 4096;
-constexpr JPH::uint kMaxBodyPairs  = 8192;
-constexpr JPH::uint kMaxContacts   = 8192;
+// Capacites du moteur (memoire reservee a l'avance). Un gros tas de boites genere beaucoup de paires et de contacts.
+constexpr JPH::uint kMaxBodyPairs  = 65536;
+constexpr JPH::uint kMaxContacts   = 20480;
+constexpr JPH::uint kTempMemoryBytes = 128u * 1024u * 1024u; // reserve de maniere paresseuse : seule la memoire utilisee est occupee
 
 } // namespace
 
 struct Physics::Impl {
-    JPH::TempAllocatorImpl                temp{16 * 1024 * 1024};
+    // Memoire de travail reutilisee a chaque pas de simulation. Elle doit etre assez grande pour les capacites ci-dessus
+    // (paires de corps et contacts) : trop petite, Jolt plante des qu'un gros tas de corps se forme.
+    JPH::TempAllocatorImpl                temp{kTempMemoryBytes};
     JPH::JobSystemThreadPool              jobs;
     BPLayerInterfaceImpl                  bpLayerInterface;
     ObjectVsBroadPhaseLayerFilterImpl     objectVsBroadPhaseFilter;
@@ -77,7 +80,7 @@ struct Physics::Impl {
     Impl()
         : jobs(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers,
                static_cast<int>(std::max(1u, std::thread::hardware_concurrency()) - 1)) {
-        system.Init(kMaxBodies, 0, kMaxBodyPairs, kMaxContacts,
+        system.Init(Physics::kMaxBodies, 0, kMaxBodyPairs, kMaxContacts,
                     bpLayerInterface, objectVsBroadPhaseFilter, objectLayerPairFilter);
         system.SetGravity(JPH::Vec3(0.0f, -9.81f, 0.0f));
     }
