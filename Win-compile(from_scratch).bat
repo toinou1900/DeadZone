@@ -1,4 +1,4 @@
 rmdir /s /q build\windows
 cmake --preset windows
-cmake --build windows-release
+cmake --build windows
 pause
