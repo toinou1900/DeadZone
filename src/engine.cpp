@@ -62,6 +62,24 @@ void Engine::shutdown() {
 void Engine::buildDefaultScene() {
     m_scene.createFloor();
     m_scene.createCube("Cube", 0.0f, 3.0f, 0.0f); // tombe sur le sol au demarrage
+    m_scene.createPlayer(0.0f, -1.9f, -6.0f);     // le joueur apparait devant le cube, au-dessus du sol (y = -2)
+    m_scene.setPlayerVisible(!m_playerMode);
+}
+
+void Engine::togglePlayerMode() {
+    m_playerMode = !m_playerMode;
+    if (m_playerMode) {
+        // On repasse en joueur la ou on se trouve : le personnage vient se poser sous la camera.
+        float eye[3];
+        m_camera.position(eye);
+        const float feet[3] = {eye[0], eye[1] - m_scene.playerEyeHeight(), eye[2]};
+        m_scene.teleportPlayer(feet);
+    }
+    m_scene.setPlayerVisible(!m_playerMode); // en camera libre, on voit le personnage (boite orange)
+}
+
+void Engine::updateMouseCapture() {
+    m_window.setMouseCapture(m_mouseLook || m_mouseLocked);
 }
 
 void Engine::handleEvent(const SDL_Event& e) {
@@ -74,6 +92,8 @@ void Engine::handleEvent(const SDL_Event& e) {
         if (e.key.key == SDLK_ESCAPE) m_running = false;
         if (e.key.key == SDLK_B) throwBox();
         if (e.key.key == SDLK_P) m_physicsPaused = !m_physicsPaused;
+        if (e.key.key == SDLK_F) togglePlayerMode();
+        if (e.key.key == SDLK_TAB) { m_mouseLocked = !m_mouseLocked; updateMouseCapture(); }
         if (e.key.key == SDLK_V) m_renderer.setVsync(!m_renderer.vsync());
         if (e.key.key == SDLK_R) { m_scene.clear(); buildDefaultScene(); m_error.clear(); m_throwCount = 0; }
         if (e.key.key == SDLK_DELETE || e.key.key == SDLK_BACKSPACE) m_scene.destroyLastSpawned();
@@ -97,17 +117,17 @@ void Engine::handleEvent(const SDL_Event& e) {
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
         if (e.button.button == SDL_BUTTON_RIGHT) {
             m_mouseLook = true;
-            m_window.setMouseCapture(true);
+            updateMouseCapture();
         }
         break;
     case SDL_EVENT_MOUSE_BUTTON_UP:
         if (e.button.button == SDL_BUTTON_RIGHT) {
             m_mouseLook = false;
-            m_window.setMouseCapture(false);
+            updateMouseCapture();
         }
         break;
     case SDL_EVENT_MOUSE_MOTION:
-        if (m_mouseLook) m_camera.look(e.motion.xrel, e.motion.yrel);
+        if (m_mouseLook || m_mouseLocked) m_camera.look(e.motion.xrel, e.motion.yrel);
         break;
     default:
         break;
@@ -115,16 +135,31 @@ void Engine::handleEvent(const SDL_Event& e) {
 }
 
 void Engine::update(float dt) {
-    m_scene.update(dt);                              // animations
-    if (!m_physicsPaused) m_scene.updatePhysics(dt); // physique
+    m_scene.update(dt); // animations
 
-    // Deplacement (touches physiques : WASD en QWERTY = ZQSD en AZERTY)
+    // Touches physiques : WASD en QWERTY = ZQSD en AZERTY
     const bool* keys = SDL_GetKeyboardState(nullptr);
-    const float speed = (keys[SDL_SCANCODE_LSHIFT] ? 12.0f : 4.0f) * dt;
     const float forward = (keys[SDL_SCANCODE_W] ? 1.0f : 0.0f) - (keys[SDL_SCANCODE_S] ? 1.0f : 0.0f);
     const float right   = (keys[SDL_SCANCODE_D] ? 1.0f : 0.0f) - (keys[SDL_SCANCODE_A] ? 1.0f : 0.0f);
-    const float up      = (keys[SDL_SCANCODE_SPACE] ? 1.0f : 0.0f) - (keys[SDL_SCANCODE_LCTRL] ? 1.0f : 0.0f);
-    m_camera.move(forward * speed, right * speed, up * speed);
+
+    if (m_playerMode) {
+        m_scene.setPlayerInput(forward, right, m_camera.yaw(), keys[SDL_SCANCODE_LSHIFT], keys[SDL_SCANCODE_SPACE]);
+    } else {
+        m_scene.setPlayerInput(0.0f, 0.0f, m_camera.yaw(), false, false); // le personnage reste immobile
+    }
+
+    if (!m_physicsPaused) m_scene.updatePhysics(dt); // physique (pilote aussi le joueur)
+
+    if (m_playerMode) {
+        // Camera a la premiere personne : aux yeux du personnage
+        float eye[3];
+        if (m_scene.playerEyePosition(eye)) m_camera.setPosition(eye[0], eye[1], eye[2]);
+    } else {
+        // Camera libre : on vole
+        const float speed = (keys[SDL_SCANCODE_LSHIFT] ? 12.0f : 4.0f) * dt;
+        const float up    = (keys[SDL_SCANCODE_SPACE] ? 1.0f : 0.0f) - (keys[SDL_SCANCODE_LCTRL] ? 1.0f : 0.0f);
+        m_camera.move(forward * speed, right * speed, up * speed);
+    }
 }
 
 void Engine::render(float dt) {
@@ -144,11 +179,17 @@ void Engine::render(float dt) {
     m_renderer.text(1, 1, 0x0f, "DeadZone Engine");
     m_renderer.text(1, 2, 0x07, "Renderer : %s", m_renderer.rendererName());
     m_renderer.text(1, 3, 0x07, "FPS : %.0f (%.1f ms)   Vsync : %s", m_fps, m_frameMs, m_renderer.vsync() ? "on" : "off");
-    m_renderer.text(1, 5, 0x07, "ZQSD / WASD : deplacement   Espace / Ctrl : monter / descendre   Shift : vite   Clic droit maintenu : regarder");
-    m_renderer.text(1, 6, 0x07, "B : lancer une boite   P : pause physique   R : reinitialiser   V : vsync   Suppr : retirer le dernier   Echap : quitter");
+    if (m_playerMode)
+        m_renderer.text(1, 5, 0x07, "ZQSD / WASD : marcher   Espace : sauter   Shift : courir   Souris : regarder (clic droit maintenu, ou Tab pour verrouiller)");
+    else
+        m_renderer.text(1, 5, 0x07, "ZQSD / WASD : voler   Espace / Ctrl : monter / descendre   Shift : vite   Souris : regarder (clic droit maintenu, ou Tab)");
+    m_renderer.text(1, 6, 0x07, "B : lancer une boite   F : joueur / camera libre   P : pause   R : reinitialiser   V : vsync   Suppr : retirer   Echap : quitter");
     m_renderer.text(1, 7, 0x07, "Glisser un modele (.fbx .obj .stl .gltf .glb .ply .dae .3ds) sur la fenetre : l'ajouter a la scene");
 
     int y = 9;
+    m_renderer.text(1, y++, 0x0b, "Mode : %s%s%s", m_playerMode ? "joueur" : "camera libre",
+                    m_playerMode ? (m_scene.playerOnGround() ? "  (au sol)" : "  (en l'air)") : "",
+                    m_mouseLocked ? "   [souris verrouillee]" : "");
     m_renderer.text(1, y++, 0x0e, "Scene : %u entites, %u / %u corps physiques%s", static_cast<unsigned>(m_scene.entityCount()),
                     m_physics.bodyCount(), Physics::kMaxBodies, m_physicsPaused ? "   [PHYSIQUE EN PAUSE]" : "");
     const auto& models = m_scene.models();

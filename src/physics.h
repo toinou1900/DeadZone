@@ -15,6 +15,14 @@ struct BoxBodyDesc {
     float angularVelocity[3] = {0.0f, 0.0f, 0.0f};
 };
 
+// Personnage en capsule. `position` = position des PIEDS.
+struct CharacterDesc {
+    float position[3] = {0.0f, 0.0f, 0.0f};
+    float radius      = 0.4f;
+    float halfHeight  = 0.5f; // demi-hauteur du cylindre ; hauteur totale = 2 * (halfHeight + radius)
+    float mass        = 70.0f;
+};
+
 class Physics {
 public:
     static constexpr uint32_t kInvalidBody = 0xFFFFFFFFu;
@@ -33,13 +41,30 @@ public:
     void     destroyBody(uint32_t body);
 
     // Fait avancer la simulation de `dt` secondes reelles, par pas fixes de 1/60 s (resultat reproductible,
-    // quel que soit le nombre d'images par seconde).
-    void update(float dt);
+    // quel que soit le nombre d'images par seconde). Retourne le nombre de pas effectues (souvent 0 a haut FPS).
+    int update(float dt);
+
+    // Fraction (0..1) du pas suivant deja ecoulee : sert a interpoler l'affichage entre les deux derniers etats.
+    float interpolationAlpha() const;
 
     // Position et orientation (quaternion x, y, z, w) d'un corps. Retourne false si le corps n'existe pas.
     bool getTransform(uint32_t body, float position[3], float rotation[4]) const;
 
     uint32_t bodyCount() const;
+
+    // ---- Personnages (capsule qui marche, saute, pousse les objets ; ne bascule jamais)
+    // Un personnage est aussi un corps : il compte dans bodyCount(). Retourne kInvalidBody si le moteur est plein.
+    uint32_t createCharacter(const CharacterDesc& desc);
+    void     destroyCharacter(uint32_t character);
+
+    // Applique une commande de deplacement : vitesse horizontale souhaitee (m/s, repere du monde), saut eventuel.
+    // Au sol, la vitesse est appliquee directement ; en l'air elle est rejointe progressivement (`airControl`).
+    // A appeler a chaque image, avant update().
+    void moveCharacter(uint32_t character, float vx, float vz, bool jump, float jumpSpeed, float airControl, float dt);
+
+    bool characterOnGround(uint32_t character) const;
+    bool getCharacterPosition(uint32_t character, float feet[3]) const; // position des pieds
+    void teleportCharacter(uint32_t character, const float feet[3]);    // deplace les pieds, annule la vitesse
 
 private:
     struct Impl;

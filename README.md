@@ -25,12 +25,16 @@ Linux :
 La premiere configuration telecharge SDL3 et bgfx (plusieurs minutes, c'est normal).
 
 ## Controles
-- ZQSD (AZERTY) / WASD (QWERTY) : deplacement (memes touches physiques)
-- Espace / Ctrl gauche : monter / descendre, Shift : plus vite
-- Clic droit maintenu + souris : regarder autour
+Mode **joueur** (par defaut) :
+- ZQSD (AZERTY) / WASD (QWERTY) : marcher (memes touches physiques), **Shift** : courir, **Espace** : sauter
+- Souris : regarder, avec clic droit maintenu ou **Tab** pour verrouiller la souris (Tab de nouveau pour la liberer)
+- **F** : passer en camera libre (on vole : Espace / Ctrl monter / descendre, Shift : vite). Le personnage devient
+  visible (boite orange) ; en repassant en mode joueur, il vient se poser sous la camera.
+
+Dans les deux modes :
 - **B** : lancer une boite devant la camera
 - **P** : mettre la physique en pause / la relancer
-- **R** : reinitialiser la scene (sol + cube)
+- **R** : reinitialiser la scene (sol, cube, joueur)
 - Glisser un modele sur la fenetre : l'ajouter a la scene (il tombe sur le sol)
 - Suppr / Retour arriere : retirer le dernier objet ajoute (modele ou boite)
 - V : activer / couper la synchronisation verticale (vsync)
@@ -66,14 +70,18 @@ La premiere configuration telecharge SDL3 et bgfx (plusieurs minutes, c'est norm
   physique pilote le `Transform` de l'entite. Detruire l'entite detruit son corps.
 - Capacite : jusqu'a **10 240 corps** simultanes. Au-dela, B et le glisser-deposer sont refuses avec un message
   (Suppr ou R pour en retirer).
-- Pas encore : sphere / capsule / forme exacte, articulations, raycasts, evenements de collision.
+- **Joueur** : capsule de 1,8 m (rayon 0,4 m), vitesses 5 m/s (marche) / 9 m/s (course), saut ~1,2 m, controle reduit en
+  l'air. Il pousse les objets et ne traverse ni sol ni murs. S'il tombe du monde (y < -40), il reapparait au depart.
+- **Interpolation** : la physique avance par pas de 1/60 s, mais l'affichage est interpole entre les deux derniers pas.
+  Sans cela, a 200 FPS le mouvement (et surtout la camera) avancerait par a-coups.
+- Pas encore : sphere / forme exacte, escaliers, pentes raides, articulations, raycasts, evenements de collision.
 
 ## Structure du code (src/)
 | Fichier | Role |
 |---|---|
 | `main.cpp` | Point d'entree : cree le moteur et le lance |
 | `engine.*` | `Engine` : boucle de jeu, evenements, relie tous les modules |
-| `components.h` | Composants ECS (donnees pures) : `Name`, `Transform`, `Spin`, `RigidBody`, `MeshRenderer`, `CubeRenderer`, `BoxRenderer` |
+| `components.h` | Composants ECS (donnees pures) : `Name`, `Transform`, `Spin`, `RigidBody`, `CharacterBody`, `Player`, `MeshRenderer`, `CubeRenderer`, `BoxRenderer` |
 | `transform_math.h` | Maths : quaternions, matrice monde d'un `Transform` |
 | `scene.*` | `Scene` : registre EnTT, creation d'entites et systemes (animation, physique, rendu) |
 | `physics.*` | `Physics` : moteur physique Jolt (corps en boite, pas fixe), cache l'API de Jolt |
@@ -90,7 +98,7 @@ physiques et les buffers GPU des modeles sont liberes a ce moment).
 ## ECS (EnTT)
 - **Entite** : un simple identifiant. **Composant** : des donnees (`components.h`). **Systeme** : une fonction qui
   parcourt les entites ayant certains composants (`scene.cpp`).
-- Systemes actuels : `createBodiesSystem`, `syncTransformsSystem` (physique), `spinSystem` (animation des entites
+- Systemes actuels : `createBodiesSystem`, `playerSystem`, `syncTransformsSystem` (physique), `spinSystem` (animation des entites
   sans corps physique) et `renderSystem` (Transform + MeshRenderer / CubeRenderer / BoxRenderer).
 - `Transform` stocke l'orientation en **quaternion** (x, y, z, w), comme Jolt.
 - Pour ajouter un comportement : creer un composant, l'attacher a des entites, ecrire un systeme et l'appeler dans

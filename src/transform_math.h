@@ -22,6 +22,14 @@ inline void quatNormalize(float q[4]) {
     else { q[0] = q[1] = q[2] = 0.0f; q[3] = 1.0f; }
 }
 
+// Interpolation lineaire normalisee entre deux quaternions (par le chemin le plus court).
+inline void quatNlerp(const float a[4], const float b[4], float t, float out[4]) {
+    const float dot  = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+    const float sign = dot < 0.0f ? -1.0f : 1.0f;
+    for (int i = 0; i < 4; ++i) out[i] = a[i] * (1.0f - t) + b[i] * sign * t;
+    quatNormalize(out);
+}
+
 // Quaternion d'une rotation de vecteur `w` (axe = direction, angle = longueur, en radians) multipliee par dt.
 inline void quatFromRotationVector(const float w[3], float dt, float out[4]) {
     const float len = std::sqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);

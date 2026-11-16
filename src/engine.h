@@ -31,6 +31,8 @@ private:
     void buildDefaultScene();                 // sol + cube
     void spawnModel(const std::string& path); // charge un fichier et cree une entite dans la scene
     void throwBox();                          // lance une boite devant la camera
+    void togglePlayerMode();                  // joueur <-> camera libre
+    void updateMouseCapture();                // capture la souris si clic droit maintenu ou souris verrouillee
     bool checkPhysicsCapacity();              // false (et message d'erreur) si le moteur physique est plein
 
     Window   m_window;
@@ -43,7 +45,9 @@ private:
     std::mt19937 m_rng{12345};
 
     bool     m_running       = false;
-    bool     m_mouseLook     = false;
+    bool     m_mouseLook     = false; // clic droit maintenu
+    bool     m_mouseLocked   = false; // souris verrouillee (touche Tab)
+    bool     m_playerMode    = true;  // true : on controle le joueur ; false : camera libre (vol)
     bool     m_minimized     = false; // fenetre reduite : on met le rendu en pause
     bool     m_physicsPaused = false;
     uint64_t m_lastTicks     = 0;

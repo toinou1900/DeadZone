@@ -10,6 +10,10 @@ public:
     // `right` reste horizontal, `up` est vertical. Valeurs deja multipliees par vitesse * dt.
     void move(float forward, float right, float up);
 
+    // Place la camera (mode joueur : au niveau des yeux du personnage).
+    void setPosition(float x, float y, float z) { m_x = x; m_y = y; m_z = z; }
+    float yaw() const { return m_yaw; }
+
     // Position de la camera et direction du regard (vecteur unitaire).
     void position(float out[3]) const { out[0] = m_x; out[1] = m_y; out[2] = m_z; }
     void forward(float out[3]) const;
