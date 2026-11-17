@@ -21,6 +21,8 @@ struct CharacterDesc {
     float radius      = 0.4f;
     float halfHeight  = 0.5f; // demi-hauteur du cylindre ; hauteur totale = 2 * (halfHeight + radius)
     float mass        = 70.0f;
+    // Force maximale (newtons) avec laquelle il peut pousser les objets : un caisson leger bouge, un gros bloc non.
+    float maxPushForce = 3000.0f;
 };
 
 class Physics {
@@ -59,8 +61,10 @@ public:
 
     // Applique une commande de deplacement : vitesse horizontale souhaitee (m/s, repere du monde), saut eventuel.
     // Au sol, la vitesse est appliquee directement ; en l'air elle est rejointe progressivement (`airControl`).
-    // A appeler a chaque image, avant update().
-    void moveCharacter(uint32_t character, float vx, float vz, bool jump, float jumpSpeed, float airControl, float dt);
+    // A appeler a chaque image, avant update(). La commande est appliquee a chaque pas de simulation.
+    // Le personnage est "cinematique" (Jolt CharacterVirtual) : les objets ne le repoussent pas, il glisse le long
+    // des obstacles, monte les marches et pousse les objets avec une force limitee.
+    void moveCharacter(uint32_t character, float vx, float vz, bool jump, float jumpSpeed, float airControl);
 
     bool characterOnGround(uint32_t character) const;
     bool getCharacterPosition(uint32_t character, float feet[3]) const; // position des pieds

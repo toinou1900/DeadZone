@@ -81,7 +81,7 @@ std::vector<entt::entity> createBodiesSystem(entt::registry& registry, Physics& 
 }
 
 // Systeme : transforme l'entree du joueur en commande de deplacement du personnage.
-void playerSystem(entt::registry& registry, Physics& physics, float dt) {
+void playerSystem(entt::registry& registry, Physics& physics) {
     registry.view<CharacterBody, Player>().each([&](CharacterBody& cb, Player& p) {
         if (cb.body == CharacterBody::kNoBody) return;
         // Direction horizontale dans le repere du monde (meme convention que la camera : avant = (sin yaw, cos yaw))
@@ -91,7 +91,7 @@ void playerSystem(entt::registry& registry, Physics& physics, float dt) {
         const float len = std::sqrt(dx * dx + dz * dz);
         if (len > 1.0f) { dx /= len; dz /= len; } // pas plus vite en diagonale
         const float speed = p.inputSprint ? p.sprintSpeed : p.walkSpeed;
-        physics.moveCharacter(cb.body, dx * speed, dz * speed, p.inputJump, p.jumpSpeed, p.airControl, dt);
+        physics.moveCharacter(cb.body, dx * speed, dz * speed, p.inputJump, p.jumpSpeed, p.airControl);
         p.onGround = physics.characterOnGround(cb.body);
 
         float feet[3];
@@ -340,7 +340,7 @@ void Scene::update(float dt) {
 void Scene::updatePhysics(float dt) {
     if (!m_physics) return;
     for (const entt::entity e : createBodiesSystem(m_registry, *m_physics)) removeEntity(e); // moteur plein
-    playerSystem(m_registry, *m_physics, dt);
+    playerSystem(m_registry, *m_physics);
     const int steps = m_physics->update(dt);
     syncTransformsSystem(m_registry, *m_physics, steps, m_physics->interpolationAlpha());
 }

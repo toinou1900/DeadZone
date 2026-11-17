@@ -6,7 +6,7 @@
 #include <Jolt/Core/JobSystemThreadPool.h>
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
-#include <Jolt/Physics/Character/Character.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -63,7 +64,6 @@ public:
 };
 
 constexpr float    kFixedStep      = 1.0f / 60.0f;
-constexpr float    kCollisionTolerance = 0.05f; // marge utilisee pour decider si un personnage touche le sol
 constexpr int      kMaxStepsPerCall = 5;   // au-dela, on abandonne le retard plutot que de s'effondrer ("spirale de la mort")
 // Capacites du moteur (memoire reservee a l'avance). Un gros tas de boites genere beaucoup de paires et de contacts.
 constexpr JPH::uint kMaxBodyPairs  = 65536;
@@ -82,10 +82,53 @@ struct Physics::Impl {
     ObjectLayerPairFilterImpl             objectLayerPairFilter;
     JPH::PhysicsSystem                    system;
     float                                 accumulator = 0.0f;
-    std::vector<JPH::Ref<JPH::Character>> characters; // l'identifiant d'un personnage = son index (nullptr = place libre)
 
-    JPH::Character* character(uint32_t id) const {
-        return id < characters.size() ? characters[id].GetPtr() : nullptr;
+    // Un personnage = un CharacterVirtual de Jolt + la commande de deplacement demandee par le jeu.
+    struct CharacterState {
+        JPH::Ref<JPH::CharacterVirtual> character;
+        float desiredVx = 0.0f, desiredVz = 0.0f; // vitesse horizontale souhaitee (m/s, repere du monde)
+        bool  jumpRequested = false;
+        float jumpSpeed     = 5.0f;
+        float airControl    = 3.0f;
+    };
+    std::vector<std::unique_ptr<CharacterState>> characters; // l'identifiant d'un personnage = son index (nullptr = place libre)
+
+    CharacterState* character(uint32_t id) const {
+        return id < characters.size() ? characters[id].get() : nullptr;
+    }
+
+    // Un pas de simulation pour un personnage : gravite, saut, vitesse voulue, puis deplacement avec collisions.
+    void stepCharacter(CharacterState& c, float dt) {
+        const bool ground = c.character->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
+        const JPH::Vec3 gravity        = system.GetGravity();
+        const JPH::Vec3 current        = c.character->GetLinearVelocity();
+        const JPH::Vec3 groundVelocity = ground ? c.character->GetGroundVelocity() : JPH::Vec3::sZero();
+
+        float vy;
+        if (ground && current.GetY() - groundVelocity.GetY() < 0.1f) { // au sol (et ne monte pas) : suit le sol
+            vy = groundVelocity.GetY();
+            if (c.jumpRequested) vy += c.jumpSpeed;
+        } else {                                                       // en l'air : gravite
+            vy = current.GetY() + gravity.GetY() * dt;
+        }
+
+        float vx, vz;
+        if (ground) {                                                  // au sol : controle total
+            vx = groundVelocity.GetX() + c.desiredVx;
+            vz = groundVelocity.GetZ() + c.desiredVz;
+        } else {                                                       // en l'air : on garde l'elan, on corrige doucement
+            const float k = 1.0f - std::exp(-c.airControl * dt);
+            vx = current.GetX() + (c.desiredVx - current.GetX()) * k;
+            vz = current.GetZ() + (c.desiredVz - current.GetZ()) * k;
+        }
+        c.character->SetLinearVelocity(JPH::Vec3(vx, vy, vz));
+        c.jumpRequested = false;
+
+        JPH::CharacterVirtual::ExtendedUpdateSettings updateSettings; // colle au sol dans les descentes, monte les marches
+        c.character->ExtendedUpdate(dt, gravity, updateSettings,
+                                    system.GetDefaultBroadPhaseLayerFilter(Layers::MOVING),
+                                    system.GetDefaultLayerFilter(Layers::MOVING),
+                                    JPH::BodyFilter(), JPH::ShapeFilter(), temp);
     }
 
     Impl()
@@ -158,10 +201,9 @@ int Physics::update(float dt) {
     m_impl->accumulator += dt;
     int steps = 0;
     while (m_impl->accumulator >= kFixedStep && steps < kMaxStepsPerCall) {
+        for (auto& c : m_impl->characters)       // les personnages se deplacent avant le pas de simulation
+            if (c) m_impl->stepCharacter(*c, kFixedStep);
         m_impl->system.Update(kFixedStep, 1, &m_impl->temp, &m_impl->jobs);
-        // Apres chaque pas : met a jour l'etat "au sol / en l'air" de chaque personnage
-        for (JPH::Ref<JPH::Character>& c : m_impl->characters)
-            if (c) c->PostSimulation(kCollisionTolerance);
         m_impl->accumulator -= kFixedStep;
         ++steps;
     }
@@ -200,65 +242,58 @@ uint32_t Physics::createCharacter(const CharacterDesc& d) {
     const JPH::ShapeSettings::ShapeResult shape = shapeSettings.Create();
     if (shape.HasError()) return kInvalidBody;
 
-    JPH::Ref<JPH::CharacterSettings> settings = new JPH::CharacterSettings;
+    JPH::Ref<JPH::CharacterVirtualSettings> settings = new JPH::CharacterVirtualSettings;
     settings->mShape             = shape.Get();
     settings->mMass              = d.mass;
-    settings->mFriction          = 0.0f;                              // ne "colle" pas aux murs ; la marche est pilotee par la vitesse
-    settings->mLayer             = Layers::MOVING;
+    settings->mMaxStrength       = d.maxPushForce;                    // force maximale de poussee des objets (N)
     settings->mUp                = JPH::Vec3::sAxisY();
     settings->mSupportingVolume  = JPH::Plane(JPH::Vec3::sAxisY(), -d.radius); // seule la demi-sphere du bas compte comme "appui"
+    settings->mInnerBodyShape    = shape.Get();                       // corps "interieur" : les objets lances le heurtent
+    settings->mInnerBodyLayer    = Layers::MOVING;
 
-    JPH::Ref<JPH::Character> character = new JPH::Character(
+    JPH::Ref<JPH::CharacterVirtual> character = new JPH::CharacterVirtual(
         settings, JPH::RVec3(d.position[0], d.position[1], d.position[2]), JPH::Quat::sIdentity(), 0, &m_impl->system);
-    character->AddToPhysicsSystem(JPH::EActivation::Activate);
-    if (character->GetBodyID().IsInvalid()) return kInvalidBody;
+
+    auto state = std::make_unique<Impl::CharacterState>();
+    state->character = character;
 
     // Reutilise une place libre sinon ajoute a la fin
     for (uint32_t i = 0; i < m_impl->characters.size(); ++i) {
-        if (!m_impl->characters[i]) { m_impl->characters[i] = character; return i; }
+        if (!m_impl->characters[i]) { m_impl->characters[i] = std::move(state); return i; }
     }
-    m_impl->characters.push_back(character);
+    m_impl->characters.push_back(std::move(state));
     return static_cast<uint32_t>(m_impl->characters.size() - 1);
 }
 
 void Physics::destroyCharacter(uint32_t id) {
-    if (!m_impl || id >= m_impl->characters.size() || !m_impl->characters[id]) return;
-    m_impl->characters[id]->RemoveFromPhysicsSystem();
-    m_impl->characters[id] = nullptr; // le corps est detruit avec le dernier Ref
+    if (!m_impl || id >= m_impl->characters.size()) return;
+    m_impl->characters[id].reset(); // le corps interieur est retire du systeme avec le CharacterVirtual
 }
 
-void Physics::moveCharacter(uint32_t id, float vx, float vz, bool jump, float jumpSpeed, float airControl, float dt) {
-    JPH::Character* c = m_impl ? m_impl->character(id) : nullptr;
+void Physics::moveCharacter(uint32_t id, float vx, float vz, bool jump, float jumpSpeed, float airControl) {
+    Impl::CharacterState* c = m_impl ? m_impl->character(id) : nullptr;
     if (!c) return;
-    const bool ground = c->GetGroundState() == JPH::Character::EGroundState::OnGround;
-    JPH::Vec3 v = c->GetLinearVelocity();
-    if (ground) {
-        v.SetX(vx); v.SetZ(vz);                                       // au sol : controle total
-    } else {
-        const float k = 1.0f - std::exp(-airControl * dt);            // en l'air : on garde l'elan, on corrige doucement
-        v.SetX(v.GetX() + (vx - v.GetX()) * k);
-        v.SetZ(v.GetZ() + (vz - v.GetZ()) * k);
-    }
-    if (jump && ground) v.SetY(jumpSpeed);
-    c->SetLinearVelocity(v);
+    c->desiredVx = vx; c->desiredVz = vz;
+    c->jumpSpeed = jumpSpeed; c->airControl = airControl;
+    c->jumpRequested = c->jumpRequested || jump; // memorise un appui court (images sans pas de simulation)
 }
 
 bool Physics::characterOnGround(uint32_t id) const {
-    const JPH::Character* c = m_impl ? m_impl->character(id) : nullptr;
-    return c && c->GetGroundState() == JPH::Character::EGroundState::OnGround;
+    const Impl::CharacterState* c = m_impl ? m_impl->character(id) : nullptr;
+    return c && c->character->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
 }
 
 bool Physics::getCharacterPosition(uint32_t id, float feet[3]) const {
-    const JPH::Character* c = m_impl ? m_impl->character(id) : nullptr;
+    const Impl::CharacterState* c = m_impl ? m_impl->character(id) : nullptr;
     if (!c) return false;
-    const JPH::RVec3 p = c->GetPosition();
+    const JPH::RVec3 p = c->character->GetPosition();
     feet[0] = static_cast<float>(p.GetX()); feet[1] = static_cast<float>(p.GetY()); feet[2] = static_cast<float>(p.GetZ());
     return true;
 }
 
 void Physics::teleportCharacter(uint32_t id, const float feet[3]) {
-    JPH::Character* c = m_impl ? m_impl->character(id) : nullptr;
+    Impl::CharacterState* c = m_impl ? m_impl->character(id) : nullptr;
     if (!c) return;
-    c->SetPosition(JPH::RVec3(feet[0], feet[1], feet[2]));
-    c->SetLinearVelocity(JPH::Vec3::sZero());
+    c->character->SetPosition(JPH::RVec3(feet[0], feet[1], feet[2]));
+    c->character->SetLinearVelocity(JPH::Vec3::sZero());
 }

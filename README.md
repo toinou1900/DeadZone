@@ -70,11 +70,14 @@ Dans les deux modes :
   physique pilote le `Transform` de l'entite. Detruire l'entite detruit son corps.
 - Capacite : jusqu'a **10 240 corps** simultanes. Au-dela, B et le glisser-deposer sont refuses avec un message
   (Suppr ou R pour en retirer).
-- **Joueur** : capsule de 1,8 m (rayon 0,4 m), vitesses 5 m/s (marche) / 9 m/s (course), saut ~1,2 m, controle reduit en
-  l'air. Il pousse les objets et ne traverse ni sol ni murs. S'il tombe du monde (y < -40), il reapparait au depart.
+- **Joueur** : capsule de 1,8 m (rayon 0,4 m), vitesses 5 m/s (marche) / 9 m/s (course), saut ~1,3 m, controle reduit en
+  l'air. Personnage *cinematique* (Jolt `CharacterVirtual`) : les objets ne le repoussent pas, il glisse le long des murs,
+  monte les marches (jusqu'a 40 cm) et colle au sol dans les descentes. Il pousse les petits objets avec une force
+  limitee (3000 N, reglable dans `CharacterDesc::maxPushForce`) : un caisson bouge, un gros bloc l'arrete net.
+  Un objet lance sur lui le heurte (et peut le repousser). S'il tombe du monde (y < -40), il reapparait au depart.
 - **Interpolation** : la physique avance par pas de 1/60 s, mais l'affichage est interpole entre les deux derniers pas.
   Sans cela, a 200 FPS le mouvement (et surtout la camera) avancerait par a-coups.
-- Pas encore : sphere / forme exacte, escaliers, pentes raides, articulations, raycasts, evenements de collision.
+- Pas encore : sphere / forme exacte, pentes raides, articulations, raycasts, evenements de collision.
 
 ## Structure du code (src/)
 | Fichier | Role |
